@@ -3,7 +3,7 @@
   "short_name": "Life OS",
   "description": "Taken, financiën, kot-afrekeningen en voorschotten op één plek.",
   "lang": "nl-BE",
-  "start_url": "./#snel",
+  "start_url": "./",
   "scope": "./",
   "display": "standalone",
   "background_color": "#fbfbfa",

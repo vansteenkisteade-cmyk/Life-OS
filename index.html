@@ -2561,7 +2561,14 @@ document.addEventListener("click", e => { const b = e.target.closest("[data-them
   try { if (t === "system") localStorage.removeItem("lifeos-theme"); else localStorage.setItem("lifeos-theme", t); } catch(x) {}
   applyTheme(t); render(); afterRender(); toast(t === "system" ? "Weergave volgt je toestel" : t === "dark" ? "Donkere modus" : "Lichte modus"); });
 const startView = () => { try { return localStorage.getItem("lifeos-start") || "snel"; } catch(e) { return "snel"; } };
-(() => { const h = location.hash.slice(1); UI.view = (VIEWS.some(v => v[0] === h) || h === "snel") ? h : startView(); })();
+(() => {
+  let h = location.hash.slice(1);
+  const standalone = (window.matchMedia && matchMedia("(display-mode: standalone)").matches) || navigator.standalone === true;
+  /* het app-icoon start altijd met #snel: dan telt de keuze uit Instellingen */
+  if (standalone && (h === "snel" || h === "") ) h = "";
+  UI.view = (VIEWS.some(v => v[0] === h) || h === "snel") ? h : startView();
+  if (location.hash.slice(1) !== UI.view) { try { history.replaceState(null, "", "#" + UI.view); } catch(e) {} }
+})();
 render();
 initStore();
 </script>
