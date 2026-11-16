@@ -1,0 +1,23 @@
+name: Life OS meldingen
+on:
+  schedule:
+    - cron: "*/10 * * * *"   # elke 10 minuten (GitHub kan enkele minuten vertragen)
+  workflow_dispatch: {}      # handmatig starten via het tabblad Actions
+concurrency: { group: meldingen, cancel-in-progress: false }
+jobs:
+  verstuur:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    defaults: { run: { working-directory: meldingen } }
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 20 }
+      - run: npm install --no-audit --no-fund
+      - run: node notify.mjs
+        env:
+          FIREBASE_SERVICE_ACCOUNT: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
+          VAPID_PUBLIC_KEY: ${{ secrets.VAPID_PUBLIC_KEY }}
+          VAPID_PRIVATE_KEY: ${{ secrets.VAPID_PRIVATE_KEY }}
+          VAPID_SUBJECT: ${{ secrets.VAPID_SUBJECT }}
+          APP_URL: ${{ secrets.APP_URL }}
