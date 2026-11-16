@@ -251,7 +251,7 @@ function formHTML(type, ctx) {
 :root{--bg:#fbfbfa;--surface:#fff;--s2:#f2f2f0;--border:#e5e4e0;--text:#2f2e2b;--t2:#6b6a66;--t3:#9b9a96;--accent:${T.color};--ok:#0a8a0a;--okbg:#e5f3e5;--warn:#c03030}
 @media (prefers-color-scheme:dark){:root{--bg:#141413;--surface:#1f1f1e;--s2:#2a2a28;--border:#363632;--text:#ecebe7;--t2:#b3b2ab;--t3:#85847e;--okbg:#18301a;--ok:#4cc24c;--warn:#f08a8a}}
 *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
-body{margin:0;background:var(--bg);color:var(--text);font:16px/1.4 -apple-system,system-ui,sans-serif;padding:18px 18px calc(110px + env(safe-area-inset-bottom))}
+body{margin:0;background:var(--bg);color:var(--text);font:16px/1.4 -apple-system,system-ui,sans-serif;padding:64px 18px calc(110px + env(safe-area-inset-bottom))}
 h1{font-size:26px;margin:4px 0 2px;letter-spacing:-.02em;display:flex;align-items:center;gap:10px}
 h1 i{width:12px;height:12px;border-radius:4px;background:var(--accent);display:inline-block}
 .sub{color:var(--t2);font-size:14px;margin-bottom:18px}
@@ -281,10 +281,13 @@ input.t:focus{outline:2px solid var(--accent);border-color:transparent}
 .done .tick{width:64px;height:64px;border-radius:50%;background:var(--okbg);color:var(--ok);display:grid;place-items:center;font-size:34px;margin:0 auto 14px}
 .done p{color:var(--t2);margin:6px 0 22px}
 .hidden{display:none}
+.seg3{display:grid;grid-template-columns:repeat(3,1fr);gap:4px;background:var(--s2);border-radius:12px;padding:4px;margin-bottom:18px}
+.seg3 button{border:0;background:none;color:var(--t2);border-radius:9px;padding:10px 4px;font-size:14px;font-weight:600}
+.seg3 button.on{background:var(--surface);color:var(--text);box-shadow:0 1px 3px rgba(0,0,0,.15)}
 </style></head><body>
 <script>window.onerror=function(m,u,l){document.body.insertAdjacentHTML("afterbegin","<p style=\\"color:#f08a8a\\">Fout: "+m+" (regel "+l+")</p>")};</script>
 <form id="f" autocomplete="off" onsubmit="return false">
-<h1><i></i>${T.label === "Voorschot" ? "Voorschot of schuld" : T.label}</h1><div class="sub" id="sub"></div>
+<h1><i id="dot"></i><span id="ttl"></span></h1><div class="sub" id="sub"></div><div id="sw"></div>
 <div id="fields"></div>
 <div class="err" id="err"></div>
 <div class="bar"><button class="btn" id="save" type="submit">Opslaan</button></div>
@@ -292,7 +295,8 @@ input.t:focus{outline:2px solid var(--accent);border-color:transparent}
 <div class="done" id="done"><div class="tick">✓</div><h2 style="margin:0">Opgeslagen</h2><p id="doneTxt"></p>
 <div class="bar" style="position:static;background:none;padding:0"><button class="btn" id="again">Nog één toevoegen</button><p style="font-size:13px;color:var(--t3);margin-top:14px">Klaar? Veeg dit venster naar beneden.</p></div></div>
 <script>
-const CTX = ${JSON.stringify(ctx)}, TYPE = ${JSON.stringify(type)};
+const CTX = ${JSON.stringify(ctx)}, ORIG = ${JSON.stringify(type)}; let TYPE = ORIG;
+const TITLES = {kot:"Kot",uitgave:"Uitgave",inkomst:"Inkomst",lijstje:"Lijstje",taak:"Taak",voorschot:"Voorschot of schuld"};
 const $ = s => document.querySelector(s);
 const st = {cat: CTX.defaultCat || "", date: CTX.today, dir: "in", settled: false, urgent: false};
 const parseAmount = s => { s = String(s || "").trim().replace(/[€\\s]/g, ""); if (s.includes(",")) s = s.replace(/\\./g, "").replace(",", "."); const v = parseFloat(s); return isFinite(v) ? Math.round(v * 100) / 100 : NaN; };
@@ -300,7 +304,10 @@ const esc = s => String(s).replace(/[&<>"]/g, c => ({"&":"&amp;","<":"&lt;",">":
 const chips = (name, opts, cur) => '<div class="chips" data-g="' + name + '">' + opts.map(o => '<button type="button" class="chip' + (o[0] === cur ? " on" : "") + '" data-v="' + esc(o[0]) + '">' + esc(o[1]) + '</button>').join("") + '</div>';
 const dates = (past) => past ? [[CTX.today, "Vandaag"], [CTX.yesterday, "Gisteren"], [CTX.dayBefore, "Eergisteren"]] : [[CTX.today, "Vandaag"], [CTX.tomorrow, "Morgen"], [CTX.dayAfter, "Overmorgen"], [CTX.nextWeek, "Volgende week"], ["", "Geen datum"]];
 function draw() {
-  let h = "";
+  let h = ""; const keepAmt = $("#amount") ? $("#amount").value : "", keepDesc = $("#desc") ? $("#desc").value : "";
+  $("#ttl").textContent = ORIG === "kot" ? (TYPE === "kot" ? "Kot" : st.dir === "out" ? "Schuld bij iemand" : "Voorschot voor iemand") : TITLES[TYPE];
+  $("#dot").style.background = TYPE === "kot" ? "" : (CTX.othersColor || "");
+  $("#sw").innerHTML = ORIG !== "kot" ? "" : '<div class="seg3">' + [["kot", "Kot · " + CTX.recipient], ["in", "Voorschot"], ["out", "Schuld"]].map(o => '<button type="button" data-sw="' + o[0] + '" class="' + ((TYPE === "kot" ? "kot" : st.dir) === o[0] ? "on" : "") + '">' + esc(o[1]) + '</button>').join("") + '</div>';
   if (TYPE === "kot") { $("#sub").textContent = "Voorgeschoten voor " + CTX.recipient;
     h = '<input class="amount" id="amount" inputmode="decimal" placeholder="€ 0,00">' +
       '<label class="l">Categorie</label>' + chips("cat", CTX.cats.map(c => [c, c]), st.cat) +
@@ -323,7 +330,7 @@ function draw() {
       '<label class="l">Categorie</label>' + chips("cat", CTX.cats.map(c => [c, c]), st.cat) +
       '<label class="check"><input type="checkbox" id="urgent"><span>Dringend (prioriteit Hoog)</span></label>';
   } else if (TYPE === "voorschot") { $("#sub").textContent = "Met vrienden of anderen";
-    h = '<div class="cards"><button type="button" class="card' + (st.dir === "in" ? " on" : "") + '" data-dir="in"><b>Voorschot</b><span>Ik betaalde · zij moeten mij</span></button><button type="button" class="card' + (st.dir === "out" ? " on" : "") + '" data-dir="out"><b>Schuld</b><span>Zij betaalden · ik moet hen</span></button></div>' +
+    h = (ORIG === "kot" ? "" : '<div class="cards"><button type="button" class="card' + (st.dir === "in" ? " on" : "") + '" data-dir="in"><b>Voorschot</b><span>Ik betaalde · zij moeten mij</span></button><button type="button" class="card' + (st.dir === "out" ? " on" : "") + '" data-dir="out"><b>Schuld</b><span>Zij betaalden · ik moet hen</span></button></div>') +
       '<label class="l">Bedrag per persoon</label><input class="amount" id="amount" inputmode="decimal" placeholder="€ 0,00" style="font-size:36px">' +
       '<div class="split" style="margin-top:10px">Rekening delen: <input id="tot" inputmode="decimal" placeholder="totaal €"> ÷ <input id="n" inputmode="numeric" placeholder="pers." style="width:70px"></div>' +
       '<label class="l" id="whoL">' + (st.dir === "out" ? "Aan wie moet je terugbetalen" : "Wie moet jou terugbetalen") + '</label><input class="t" id="names" placeholder="bv. Lotte, Jens">' +
@@ -332,10 +339,13 @@ function draw() {
       '<label class="check"><input type="checkbox" id="withMe"' + (st.dir === "out" ? " checked" : "") + '><span id="withMeL">' + (st.dir === "out" ? "Ook als uitgave bij Financiën (het was voor jezelf)" : "Ik deed zelf ook mee: mijn deel als uitgave") + '</span></label>' +
       '<label class="l">Categorie van de uitgave</label><select class="t" id="cat">' + CTX.expenseCats.map(c => '<option' + (c === CTX.ownCat ? " selected" : "") + '>' + esc(c) + '</option>').join("") + '</select>';
   }
-  $("#fields").innerHTML = h; wire(); validate();
+  $("#fields").innerHTML = h;
+  if (keepAmt && $("#amount")) $("#amount").value = keepAmt; if (keepDesc && $("#desc")) $("#desc").value = keepDesc;
+  wire(); validate();
   const first = $("#amount") || $("#text") || $("#title"); if (first) setTimeout(() => first.focus(), 250);
 }
 function wire() {
+  document.querySelectorAll("[data-sw]").forEach(b => b.addEventListener("click", () => { const v = b.dataset.sw; if (v === "kot") TYPE = "kot"; else { TYPE = "voorschot"; st.dir = v; } draw(); }));
   document.querySelectorAll("[data-g]").forEach(g => g.addEventListener("click", e => { const b = e.target.closest(".chip"); if (!b) return; st[g.dataset.g] = b.dataset.v; g.querySelectorAll(".chip").forEach(x => x.classList.toggle("on", x === b)); if (g.dataset.g === "cat" && $("#hoursWrap")) $("#hoursWrap").classList.toggle("hidden", b.dataset.v !== "Studentenjob"); validate(); }));
   document.querySelectorAll("[data-dir]").forEach(b => b.addEventListener("click", () => { st.dir = b.dataset.dir; document.querySelectorAll("[data-dir]").forEach(x => x.classList.toggle("on", x === b)); $("#whoL").textContent = st.dir === "out" ? "Aan wie moet je terugbetalen" : "Wie moet jou terugbetalen"; $("#withMeL").textContent = st.dir === "out" ? "Ook als uitgave bij Financiën (het was voor jezelf)" : "Ik deed zelf ook mee: mijn deel als uitgave"; $("#withMe").checked = st.dir === "out" || parseInt(($("#n") || {}).value, 10) > 1; }));
   const calc = () => { const t = parseAmount($("#tot").value), n = parseInt($("#n").value, 10); if (t > 0 && n > 1) { $("#amount").value = (Math.round(t / n * 100) / 100).toFixed(2).replace(".", ","); $("#withMe").checked = true; } validate(); };
@@ -345,7 +355,7 @@ function wire() {
   document.querySelectorAll("input").forEach(i => i.addEventListener("input", validate));
 }
 function collect() {
-  const d = {date: st.date};
+  const d = {date: st.date, kind: TYPE};
   if ($("#amount")) d.amount = parseAmount($("#amount").value);
   if (TYPE === "kot") { d.cat = st.cat; d.desc = $("#desc").value; d.settled = $("#settled").checked; if (!(d.amount > 0)) return "Vul een bedrag in, bv. 5,45"; if (!d.cat) return "Kies een categorie"; }
   if (TYPE === "uitgave" || TYPE === "inkomst") { d.cat = st.cat; d.desc = $("#desc").value; d.hours = $("#hours") ? parseAmount($("#hours").value) || null : null; if (!(d.amount > 0)) return "Vul een bedrag in"; if (!d.cat) return "Kies een categorie"; }
@@ -376,7 +386,7 @@ async function runAdd(type) {
   const order = (names, recent) => [...(recent || []).filter(n => names.includes(n)), ...names.filter(n => !(recent || []).includes(n))];
   const pc = {}; others.forEach(i => pc[i.person] = (pc[i.person] || 0) + 1);
   const ctx = {today: t, yesterday: addDays(t, -1), dayBefore: addDays(t, -2), tomorrow: addDays(t, 1), dayAfter: addDays(t, 2), nextWeek: addDays(t, 7),
-    recipient: (settings.kot && settings.kot.recipient) || "mama", persons: Object.keys(pc).sort((a, b) => pc[b] - pc[a]), expenseCats: exp, ownCat: exp.includes("Vrije tijd") ? "Vrije tijd" : exp[0]};
+    recipient: (settings.kot && settings.kot.recipient) || "mama", othersColor: (TYPES.voorschot || {}).color || "", persons: Object.keys(pc).sort((a, b) => pc[b] - pc[a]), expenseCats: exp, ownCat: exp.includes("Vrije tijd") ? "Vrije tijd" : exp[0]};
   if (type === "kot") { ctx.cats = (settings.kot && settings.kot.cats) || ["Eten", "Drank", "Extra"]; ctx.defaultCat = ctx.cats[0]; }
   if (type === "uitgave") { ctx.cats = order(exp, settings.recentOut); ctx.defaultCat = (settings.recentOut || [])[0] || ""; }
   if (type === "inkomst") { ctx.cats = order(inc, settings.recentIn); ctx.defaultCat = (settings.recentIn || [])[0] || ""; }
@@ -394,12 +404,13 @@ async function runAdd(type) {
     const d = JSON.parse(res);
     try {
       let label;
-      if (type === "kot") label = await saveKot(d);
-      else if (type === "uitgave") label = await saveMoney(d, settings, "out");
-      else if (type === "inkomst") label = await saveMoney(d, settings, "in");
-      else if (type === "lijstje") label = await saveList(d);
-      else if (type === "taak") label = await saveTask(d);
-      else if (type === "voorschot") label = await saveOthers(d, settings);
+      const k = d.kind || type;
+      if (k === "kot") label = await saveKot(d);
+      else if (k === "uitgave") label = await saveMoney(d, settings, "out");
+      else if (k === "inkomst") label = await saveMoney(d, settings, "in");
+      else if (k === "lijstje") label = await saveList(d);
+      else if (k === "taak") label = await saveTask(d);
+      else if (k === "voorschot") label = await saveOthers(d, settings);
       if (closed) break;
       await wv.evaluateJavaScript(`LO.done(${JSON.stringify(label)})`, false);
     } catch (e) {
