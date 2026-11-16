@@ -12,6 +12,7 @@
 <meta name="apple-mobile-web-app-status-bar-style" content="default">
 <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
 <title>Life OS</title>
+<script>(function(){try{var t=localStorage.getItem("lifeos-theme");if(t==="light"||t==="dark")document.documentElement.setAttribute("data-theme",t);}catch(e){}})();</script>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&display=swap" rel="stylesheet">
 <meta name="description" content="Life OS: taken, deadlines, financiën en kot-afrekeningen op één plek.">
@@ -39,7 +40,7 @@
   --ease-drawer:cubic-bezier(0.32,0.72,0,1);
 }
 @media (prefers-color-scheme:dark){
-  :root{
+  :root:not([data-theme="light"]){
     color-scheme:dark;
     --bg:#191918; --surface:#212120; --surface-2:#2a2a28; --hover:#30302e;
     --border:#33332f; --border-strong:#45443f;
@@ -51,6 +52,18 @@
     --attention:#e0a930; --attention-soft:#3a2f17;
     --shadow:0 1px 2px rgba(0,0,0,.3),0 6px 20px rgba(0,0,0,.35);
   }
+}
+:root[data-theme="dark"]{
+    color-scheme:dark;
+    --bg:#191918; --surface:#212120; --surface-2:#2a2a28; --hover:#30302e;
+    --border:#33332f; --border-strong:#45443f;
+    --text:#ecebe7; --text-2:#b3b2ab; --text-3:#85847e;
+    --accent:#3987e5; --accent-soft:#1d2d42;
+    --income:#0ca30c; --income-soft:#18301a; --income-text:#4cc24c;
+    --expense:#d95926; --expense-soft:#3a2419;
+    --warn:#e66767; --warn-soft:#3b1f1f; --warn-text:#f08a8a;
+    --attention:#e0a930; --attention-soft:#3a2f17;
+    --shadow:0 1px 2px rgba(0,0,0,.3),0 6px 20px rgba(0,0,0,.35);
 }
 *{box-sizing:border-box}
 [hidden]{display:none!important}
@@ -67,7 +80,8 @@ button{cursor:pointer}
 .nav-btn[aria-current="page"]{background:var(--hover);color:var(--text)}
 .nav-btn svg{width:18px;height:18px;flex:none}
 .side-foot{margin-top:auto;font-size:12px;color:var(--text-3);padding:8px 10px}
-.main{flex:1;min-width:0;padding:calc(28px + env(safe-area-inset-top)) 40px 120px;max-width:1180px}
+.main{flex:1;min-width:0;padding:calc(28px + env(safe-area-inset-top)) 40px 120px;max-width:1240px;margin:0 auto}
+@media (min-width:1700px){.main{max-width:1380px}}
 .topbar{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:22px;flex-wrap:wrap}
 h1{font-size:30px;line-height:1.15;margin:0;font-weight:650;letter-spacing:-.025em;text-wrap:balance}
 h2{font-size:16px;margin:0 0 12px;font-weight:600;letter-spacing:-.01em;text-wrap:balance}
@@ -2351,6 +2365,7 @@ function vSnel(){
 function snelSettingsCard(){
   return `<div class="card" style="margin-top:16px"><h2>App & startscherm</h2>
     <div class="row" style="margin-bottom:12px"><span class="small" style="font-weight:600">Life OS opent op dit toestel met</span><div class="seg" role="group" aria-label="Startscherm"><button data-startview="snel" aria-pressed="${startView()==="snel"}">Snel toevoegen</button><button data-startview="overzicht" aria-pressed="${startView()==="overzicht"}">Overzicht</button></div></div>
+    <div class="row" style="margin-bottom:12px"><span class="small" style="font-weight:600">Weergave</span><div class="seg" role="group" aria-label="Weergave"><button data-theme-set="system" aria-pressed="${themePref()==="system"}">Zoals je toestel</button><button data-theme-set="light" aria-pressed="${themePref()==="light"}">Licht</button><button data-theme-set="dark" aria-pressed="${themePref()==="dark"}">Donker</button></div></div>
     ${isStandalone() ? '<p class="small muted" style="margin:0">Life OS draait als app op dit toestel.</p>' : `<div class="grid g2"><div><h3>iPhone (Safari)</h3><p class="small muted" style="margin:0">Tik op het deelicoon en kies <strong>Zet op beginscherm</strong>. Open Life OS daarna altijd via dat icoon: dan werkt het schermvullend, offline en met meldingen.</p></div>
     <div><h3>Laptop (Chrome/Edge)</h3><p class="small muted" style="margin:0">Klik rechts in de adresbalk op het installeer-icoon, of gebruik gewoon deze pagina als bladwijzer.</p></div></div>`}</div>`;
 }
@@ -2533,6 +2548,18 @@ document.addEventListener("drop", e => { const col = e.target.closest && e.targe
 let rzT; window.addEventListener("resize", () => { clearTimeout(rzT); rzT = setTimeout(afterRender, 150); });
 document.addEventListener("keydown", e => { if (e.key === "Escape") { closeModal(true); closeFab(); } });
 window.addEventListener("hashchange", () => { const h = location.hash.slice(1); if ((VIEWS.some(v => v[0] === h) || h === "snel") && h !== UI.view) { UI.view = h; render(); } });
+const themePref = () => { try { return localStorage.getItem("lifeos-theme") || "system"; } catch(e) { return "system"; } };
+function applyTheme(t){
+  const r = document.documentElement;
+  if (t === "light" || t === "dark") r.setAttribute("data-theme", t); else r.removeAttribute("data-theme");
+  const dark = t === "dark" || (t !== "light" && matchMedia("(prefers-color-scheme: dark)").matches);
+  document.querySelectorAll('meta[name="theme-color"]').forEach(m => { m.removeAttribute("media"); m.setAttribute("content", dark ? "#191918" : "#fbfbfa"); });
+}
+applyTheme(themePref());
+try { matchMedia("(prefers-color-scheme: dark)").addEventListener("change", () => applyTheme(themePref())); } catch(e) {}
+document.addEventListener("click", e => { const b = e.target.closest("[data-theme-set]"); if (!b) return; const t = b.dataset.themeSet;
+  try { if (t === "system") localStorage.removeItem("lifeos-theme"); else localStorage.setItem("lifeos-theme", t); } catch(x) {}
+  applyTheme(t); render(); afterRender(); toast(t === "system" ? "Weergave volgt je toestel" : t === "dark" ? "Donkere modus" : "Lichte modus"); });
 const startView = () => { try { return localStorage.getItem("lifeos-start") || "snel"; } catch(e) { return "snel"; } };
 (() => { const h = location.hash.slice(1); UI.view = (VIEWS.some(v => v[0] === h) || h === "snel") ? h : startView(); })();
 render();
