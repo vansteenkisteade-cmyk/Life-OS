@@ -282,6 +282,7 @@ input.t:focus{outline:2px solid var(--accent);border-color:transparent}
 .done p{color:var(--t2);margin:6px 0 22px}
 .hidden{display:none}
 </style></head><body>
+<script>window.onerror=function(m,u,l){document.body.insertAdjacentHTML("afterbegin","<p style=\\"color:#f08a8a\\">Fout: "+m+" (regel "+l+")</p>")};</script>
 <form id="f" autocomplete="off" onsubmit="return false">
 <h1><i></i>${T.label === "Voorschot" ? "Voorschot of schuld" : T.label}</h1><div class="sub" id="sub"></div>
 <div id="fields"></div>
@@ -380,9 +381,13 @@ async function runAdd(type) {
   if (type === "uitgave") { ctx.cats = order(exp, settings.recentOut); ctx.defaultCat = (settings.recentOut || [])[0] || ""; }
   if (type === "inkomst") { ctx.cats = order(inc, settings.recentIn); ctx.defaultCat = (settings.recentIn || [])[0] || ""; }
   if (type === "taak") { ctx.cats = settings.taskCats || ["Studie", "Stage", "Klantproject", "Kampen", "Privé"]; ctx.defaultCat = ctx.cats.includes("Privé") ? "Privé" : ctx.cats[0]; }
-  const wv = new WebView();
-  await wv.loadHTML(formHTML(type, ctx));
+  const wv = new WebView(), html = formHTML(type, ctx);
   let closed = false; const shown = wv.present(false).then(() => { closed = true; });
+  let ready = false;
+  for (let i = 0; i < 3 && !ready && !closed; i++) {
+    try { await wv.loadHTML(html, "https://lifeos.local/"); await new Promise(r => Timer.schedule(150, false, r)); ready = await wv.evaluateJavaScript("typeof LO === 'object' && !!document.querySelector('#fields').children.length", false); } catch (e) { ready = false; }
+  }
+  if (!ready && !closed) { await wv.loadHTML(`<meta name="viewport" content="width=device-width"><body style="font:17px -apple-system;padding:24px;background:#141413;color:#eee"><h2>Formulier laadt niet</h2><p>Sluit dit venster en tik opnieuw op de widget. Lukt het nog steeds niet, stuur dan een screenshot.</p></body>`); await shown; return; }
   while (!closed) {
     const res = await Promise.race([wv.evaluateJavaScript("LO.wait(completion)", true), shown.then(() => null)]);
     if (!res || closed) break;
