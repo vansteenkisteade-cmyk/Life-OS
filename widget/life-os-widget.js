@@ -2,7 +2,7 @@
 // Eén script voor alle widgets. Kies per widget het type via "Parameter":
 //   kot · uitgave · inkomst · lijstje · taak · voorschot · overzicht
 // Tik op een widget → je vult meteen bedrag/omschrijving in → opgeslagen in je Life OS.
- 
+
 const APP_URL = "https://vansteenkisteade-cmyk.github.io/Life-OS/";
 const KC = "lifeos.";              // sleutelhanger-prefix
 const TYPES = {
@@ -14,7 +14,7 @@ const TYPES = {
   voorschot: {label: "Voorschot",  symbol: "person.2.fill",          color: "#c98500"},
   overzicht: {label: "Life OS",    symbol: "square.grid.2x2.fill",   color: "#2f2e2b"}
 };
- 
+
 /* ---------------- hulpfuncties ---------------- */
 const pad = n => String(n).padStart(2, "0");
 const iso = d => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
@@ -26,7 +26,7 @@ const eur = v => "€ " + (Math.round((v || 0) * 100) / 100).toFixed(2).replace(
 const parseAmount = s => { s = String(s || "").trim().replace(/[€\s]/g, ""); if (s.includes(",")) s = s.replace(/\./g, "").replace(",", "."); const v = parseFloat(s); return isFinite(v) ? r2(v) : NaN; };
 const capName = s => String(s || "").trim().replace(/\s+/g, " ").replace(/(^|\s)\S/g, m => m.toUpperCase());
 const ucf = s => s ? s.charAt(0).toUpperCase() + s.slice(1) : s;
- 
+
 /* Firestore REST-waarden ⇄ gewone JS-objecten */
 function enc(v) {
   if (v === null || v === undefined) return {nullValue: null};
@@ -50,11 +50,11 @@ function dec(v) {
   return null;
 }
 const decDoc = doc => dec({mapValue: {fields: doc.fields || {}}});
- 
+
 /* ---------------- instellingen & login ---------------- */
 const kcGet = k => Keychain.contains(KC + k) ? Keychain.get(KC + k) : null;
 const kcSet = (k, v) => Keychain.set(KC + k, v);
- 
+
 async function ask(title, message, fields, okLabel = "OK") {
   const a = new Alert(); a.title = title; if (message) a.message = message;
   fields.forEach(f => { const tf = f.secure ? a.addSecureTextField(f.placeholder || "", f.value || "") : a.addTextField(f.placeholder || "", f.value || ""); if (f.decimal) tf.setDecimalPadKeyboard(); if (f.email) tf.setEmailAddressKeyboard(); });
@@ -68,7 +68,7 @@ async function choose(title, options, message) {
   const i = await a.presentSheet(); return i === -1 ? null : i;
 }
 async function info(title, message) { const a = new Alert(); a.title = title; a.message = message || ""; a.addAction("OK"); await a.presentAlert(); }
- 
+
 async function setup() {
   // stap 1: Firebase-config (uit config.js)
   const cfg = await ask("Life OS koppelen", "Plak je apiKey en projectId uit config.js (stap 4 van het stappenplan).", [{placeholder: "apiKey (AIza…)", value: kcGet("apiKey") || ""}, {placeholder: "projectId", value: kcGet("projectId") || ""}], "Volgende");
@@ -124,7 +124,7 @@ async function updateDoc(name, change) {
   throw new Error("Opslaan lukte niet (te veel gelijktijdige wijzigingen). Probeer opnieuw.");
 }
 const pushItem = (name, item) => updateDoc(name, d => { d = d || {items: []}; d.items = d.items || []; d.items.push(item); return d; });
- 
+
 /* ---------------- gegevens voor de widgets ---------------- */
 async function loadAll() {
   const month = today().slice(0, 7);
@@ -154,7 +154,7 @@ function stats(D) {
   };
 }
 const dueLabel = d => { const t = today(); if (d === t) return "vandaag"; if (d === addDays(t, 1)) return "morgen"; return d.slice(8, 10) + "/" + d.slice(5, 7); };
- 
+
 /* ---------------- widget tekenen ---------------- */
 /* thema: zet in de widget-parameter "licht" of "donker" achter het type, bv. "kot donker" */
 const WPARAM = String((typeof args !== "undefined" && args.widgetParameter) || "").trim().toLowerCase();
@@ -182,9 +182,9 @@ async function buildWidget(type) {
   smallWidget(w, type, S);
   return w;
 }
- 
- 
- 
+
+
+
 /* kleine widget: één soort, één cijfer, één knop */
 function smallWidget(w, type, S) {
   w.setPadding(14, 14, 12, 14);
@@ -215,7 +215,7 @@ function smallWidget(w, type, S) {
   const btn = w.addStack(); btn.backgroundColor = soft(type, 0.16); btn.cornerRadius = 10; btn.setPadding(6, 8, 6, 8); btn.centerAlignContent();
   btn.addSpacer(); sym(btn, "plus", 10, tint(type)); btn.addSpacer(4); txt(btn, "Toevoegen", 11, C.text, 7); btn.addSpacer();
 }
- 
+
 /* middelgrote en grote widget: overzicht + snelknoppen */
 const RED = new Color("#e5484d");
 const soft = (t, a) => { const c = (TYPES[t] || TYPES.overzicht).color; return c === "#2f2e2b" ? dyn(new Color("#2f2e2b", a), new Color("#ecebe7", a)) : new Color(c, a); };
@@ -225,17 +225,17 @@ function txt(st, s, size, color, weight) {
   const t = st.addText(s); t.font = weight === 7 ? Font.boldSystemFont(size) : weight === 6 ? Font.semiboldSystemFont(size) : weight === 5 ? Font.mediumSystemFont(size) : Font.systemFont(size);
   t.textColor = color || C.text; t.lineLimit = 1; t.minimumScaleFactor = 0.75; return t;
 }
-function section(st, title, color, extra) {
+function section(st, title, color, extra, gap = 4) {
   const r = st.addStack(); r.centerAlignContent();
   const dot = r.addStack(); dot.size = new Size(6, 6); dot.cornerRadius = 3; dot.backgroundColor = color; r.addSpacer(5);
   const t = txt(r, title.toUpperCase(), 9, C.muted, 6);
   if (extra) { r.addSpacer(4); txt(r, extra, 9, RED, 6); }
-  st.addSpacer(4);
+  st.addSpacer(gap);
 }
-function todo(st, text) {
+function todo(st, text, size = 12) {
   const r = st.addStack(); r.centerAlignContent();
-  sym(r, "circle", 10, C.muted); r.addSpacer(6); txt(r, text, 12, C.text);
-  st.addSpacer(3);
+  sym(r, "circle", size - 2, C.muted); r.addSpacer(size > 12 ? 8 : 6); txt(r, text, size, C.text);
+  st.addSpacer(size > 12 ? 6 : 3);
 }
 function due(st, x) {
   const r = st.addStack(); r.centerAlignContent();
@@ -248,7 +248,7 @@ function due(st, x) {
 }
 function statTile(st, type, value, label, large) {
   const b = st.addStack(); b.url = runUrl(type); b.centerAlignContent();
-  b.backgroundColor = SURF; b.cornerRadius = 12; b.setPadding(large ? 7 : 5, 8, large ? 7 : 5, 8);
+  b.backgroundColor = SURF; b.cornerRadius = 12; b.setPadding(large ? 8 : 5, large ? 10 : 8, large ? 8 : 5, large ? 10 : 8);
   const ic = b.addStack(); ic.size = new Size(large ? 24 : 20, large ? 24 : 20); ic.cornerRadius = large ? 7 : 6; ic.backgroundColor = soft(type, 0.18); ic.centerAlignContent();
   sym(ic, TYPES[type].symbol, large ? 12 : 10, tint(type));
   b.addSpacer(7);
@@ -259,7 +259,7 @@ function statTile(st, type, value, label, large) {
   return b;
 }
 function buttons(w, types, tall) {
-  const row = w.addStack(); row.spacing = 6;
+  const row = w.addStack(); row.spacing = tall ? 8 : 6;
   types.forEach(t => {
     const b = row.addStack(); b.url = runUrl(t); b.centerAlignContent();
     b.backgroundColor = soft(t, tall ? 0.2 : 0.14); b.cornerRadius = tall ? 12 : 10; b.setPadding(tall ? 9 : 6, 6, tall ? 9 : 6, 6);
@@ -273,7 +273,7 @@ function buttons(w, types, tall) {
 async function bigWidget(w, S, fam) {
   const large = fam === "large";
   w.url = APP_URL;
-  w.setPadding(large ? 16 : 12, 15, large ? 14 : 11, 15);
+  w.setPadding(large ? 16 : 12, large ? 16 : 15, large ? 16 : 11, large ? 16 : 15);
   const top = w.addStack(); top.centerAlignContent();
   const logo = top.addStack(); logo.size = new Size(18, 18); logo.cornerRadius = 5; logo.backgroundColor = C.text; logo.centerAlignContent();
   sym(logo, "bolt.fill", 10, C.bg);
@@ -284,31 +284,31 @@ async function bigWidget(w, S, fam) {
   if (!S) { txt(w, "Geen verbinding · tik om opnieuw te proberen", 12, C.muted); w.addSpacer(); return; }
   const body = w.addStack(); body.topAlignContent();
   const left = body.addStack(); left.layoutVertically();
-  section(left, "Vandaag", tint("lijstje"));
-  const nL = large ? 5 : 2;
-  if (S.list.length) S.list.slice(0, nL).forEach(i => todo(left, i.text));
-  else { txt(left, "Alles gedaan ✓", 12, C.muted); left.addSpacer(3); }
+  section(left, "Vandaag", tint("lijstje"), "", large ? 7 : 4);
+  const nL = large ? 6 : 2;
+  if (S.list.length) S.list.slice(0, nL).forEach(i => todo(left, i.text, large ? 15 : 12));
+  else { txt(left, "Alles gedaan ✓", large ? 15 : 12, C.muted); left.addSpacer(3); }
   if (large && S.list.length > nL) { txt(left, `+${S.list.length - nL} meer`, 10, C.muted); left.addSpacer(3); }
   left.addSpacer(large ? 10 : 4);
-  section(left, "Deadlines", tint("taak"), S.late ? `${S.late} te laat` : "");
-  const nD = large ? 5 : 1;
+  section(left, large ? "Deadline" : "Deadlines", tint("taak"), S.late ? `${S.late} te laat` : "", large ? 7 : 4);
+  const nD = 1;
   if (S.next.length) S.next.slice(0, nD).forEach(x => due(left, x));
   else txt(left, "Geen deadlines", 12, C.muted);
-  body.addSpacer(10);
-  const right = body.addStack(); right.layoutVertically(); right.spacing = large ? 6 : 4; right.size = new Size(large ? 128 : 112, 0);
+  body.addSpacer(large ? 12 : 10);
+  const right = body.addStack(); right.layoutVertically(); right.spacing = large ? 6 : 4; right.size = new Size(large ? 124 : 112, 0);
   statTile(right, "kot", eur(S.kot), large ? "terug van mama" : "kot", large);
   if (large || !(S.get || S.owe)) statTile(right, "uitgave", eur(S.out), "uitgegeven", large);
   if (S.get || S.owe) statTile(right, "voorschot", S.get ? "+" + eur(S.get) : "−" + eur(S.owe), S.get ? (S.owe && large ? `jij −${eur(S.owe)}` : "te krijgen") : "jij moet nog", large);
   if (large) statTile(right, "inkomst", eur(S.in), "verdiend", large);
   w.addSpacer();
-  if (large) { buttons(w, ["uitgave", "inkomst", "lijstje", "voorschot"]); w.addSpacer(6); buttons(w, ["kot", "taak"], true); }
+  if (large) { buttons(w, ["uitgave", "inkomst", "lijstje", "voorschot"]); w.addSpacer(8); buttons(w, ["kot", "taak"], true); }
   else buttons(w, ["kot", "uitgave", "taak", "lijstje"]);
 }
- 
+
 /* ---------------- invoeren (mooi formulier) ---------------- */
 const guessOwnCat = (desc, cats) => { if (/caf|resto|eten|drink|drank|bar|pint|bier|cola|koffie|friet|frit|pizza|lunch|kebab|snack|burger|sushi/i.test(desc || "") && cats.includes("Eten buitenshuis")) return "Eten buitenshuis"; return cats.includes("Vrije tijd") ? "Vrije tijd" : cats[0]; };
 const domainOf = (list, name) => ((list || []).find(c => c.name === name) || {}).domain || "Privé";
- 
+
 /* opslaan per soort (zelfde gegevens als de app) */
 async function saveKot(d) {
   const item = {id: uid(), date: d.date || today(), amount: d.amount, cat: d.cat, desc: ucf((d.desc || "").trim()), statementId: "", excluded: false, settled: !!d.settled};
@@ -350,7 +350,7 @@ async function saveOthers(d, settings) {
   await updateDoc("others", x => { x = x || {items: []}; x.items = (x.items || []).concat(items); return x; });
   return `${debt ? "Schuld aan" : "Voorschot voor"} ${names.join(", ")} · ${eur(amount)}${names.length > 1 ? " p.p." : ""}${d.withMe ? " · eigen deel als uitgave" : ""}`;
 }
- 
+
 /* het formulier (HTML in Scriptable) */
 function formHTML(type, ctx) {
   const T = TYPES[type];
@@ -484,7 +484,7 @@ $("#again").addEventListener("click", () => { $("#done").style.display = "none";
 draw();
 </script></body></html>`;
 }
- 
+
 async function runAdd(type) {
   if (!await token()) { if (!await setup()) return; }
   let settings = {}, others = [];
@@ -527,7 +527,7 @@ async function runAdd(type) {
     }
   }
 }
- 
+
 async function menu() {
   const keys = ["kot", "uitgave", "inkomst", "lijstje", "taak", "voorschot"];
   const opts = keys.map(k => "+ " + TYPES[k].label).concat(["Life OS openen", kcGet("refresh") ? "Opnieuw koppelen / ander account" : "Koppelen met Life OS"]);
@@ -537,7 +537,7 @@ async function menu() {
   if (i === keys.length) return Safari.open(APP_URL + "#snel");
   await setup();
 }
- 
+
 /* ---------------- start ---------------- */
 if (config.runsInWidget) {
   const type = (WPARAM.replace(/\b(donker|dark|zwart|licht|light|wit)\b/g, "").trim().split(/\s+/)[0]) || "overzicht";
@@ -547,4 +547,3 @@ if (config.runsInWidget) {
   if (TYPES[q] && q !== "overzicht") await runAdd(q); else await menu();
 }
 Script.complete();
- 
