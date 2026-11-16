@@ -2,7 +2,7 @@
 // Eén script voor alle widgets. Kies per widget het type via "Parameter":
 //   kot · uitgave · inkomst · lijstje · taak · voorschot · overzicht
 // Tik op een widget → je vult meteen bedrag/omschrijving in → opgeslagen in je Life OS.
-
+ 
 const APP_URL = "https://vansteenkisteade-cmyk.github.io/Life-OS/";
 const KC = "lifeos.";              // sleutelhanger-prefix
 const TYPES = {
@@ -14,7 +14,7 @@ const TYPES = {
   voorschot: {label: "Voorschot",  symbol: "person.2.fill",          color: "#c98500"},
   overzicht: {label: "Life OS",    symbol: "square.grid.2x2.fill",   color: "#2f2e2b"}
 };
-
+ 
 /* ---------------- hulpfuncties ---------------- */
 const pad = n => String(n).padStart(2, "0");
 const iso = d => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
@@ -26,7 +26,7 @@ const eur = v => "€ " + (Math.round((v || 0) * 100) / 100).toFixed(2).replace(
 const parseAmount = s => { s = String(s || "").trim().replace(/[€\s]/g, ""); if (s.includes(",")) s = s.replace(/\./g, "").replace(",", "."); const v = parseFloat(s); return isFinite(v) ? r2(v) : NaN; };
 const capName = s => String(s || "").trim().replace(/\s+/g, " ").replace(/(^|\s)\S/g, m => m.toUpperCase());
 const ucf = s => s ? s.charAt(0).toUpperCase() + s.slice(1) : s;
-
+ 
 /* Firestore REST-waarden ⇄ gewone JS-objecten */
 function enc(v) {
   if (v === null || v === undefined) return {nullValue: null};
@@ -50,11 +50,11 @@ function dec(v) {
   return null;
 }
 const decDoc = doc => dec({mapValue: {fields: doc.fields || {}}});
-
+ 
 /* ---------------- instellingen & login ---------------- */
 const kcGet = k => Keychain.contains(KC + k) ? Keychain.get(KC + k) : null;
 const kcSet = (k, v) => Keychain.set(KC + k, v);
-
+ 
 async function ask(title, message, fields, okLabel = "OK") {
   const a = new Alert(); a.title = title; if (message) a.message = message;
   fields.forEach(f => { const tf = f.secure ? a.addSecureTextField(f.placeholder || "", f.value || "") : a.addTextField(f.placeholder || "", f.value || ""); if (f.decimal) tf.setDecimalPadKeyboard(); if (f.email) tf.setEmailAddressKeyboard(); });
@@ -68,7 +68,7 @@ async function choose(title, options, message) {
   const i = await a.presentSheet(); return i === -1 ? null : i;
 }
 async function info(title, message) { const a = new Alert(); a.title = title; a.message = message || ""; a.addAction("OK"); await a.presentAlert(); }
-
+ 
 async function setup() {
   // stap 1: Firebase-config (uit config.js)
   const cfg = await ask("Life OS koppelen", "Plak je apiKey en projectId uit config.js (stap 4 van het stappenplan).", [{placeholder: "apiKey (AIza…)", value: kcGet("apiKey") || ""}, {placeholder: "projectId", value: kcGet("projectId") || ""}], "Volgende");
@@ -124,7 +124,7 @@ async function updateDoc(name, change) {
   throw new Error("Opslaan lukte niet (te veel gelijktijdige wijzigingen). Probeer opnieuw.");
 }
 const pushItem = (name, item) => updateDoc(name, d => { d = d || {items: []}; d.items = d.items || []; d.items.push(item); return d; });
-
+ 
 /* ---------------- gegevens voor de widgets ---------------- */
 async function loadAll() {
   const month = today().slice(0, 7);
@@ -154,7 +154,7 @@ function stats(D) {
   };
 }
 const dueLabel = d => { const t = today(); if (d === t) return "vandaag"; if (d === addDays(t, 1)) return "morgen"; return d.slice(8, 10) + "/" + d.slice(5, 7); };
-
+ 
 /* ---------------- widget tekenen ---------------- */
 const C = {bg: Color.dynamic(new Color("#ffffff"), new Color("#1c1c1e")), text: Color.dynamic(new Color("#2f2e2b"), new Color("#ecebe7")), muted: Color.dynamic(new Color("#6b6a66"), new Color("#a5a49e"))};
 function header(w, type, size) {
@@ -196,108 +196,214 @@ async function buildWidget(type) {
   w.addSpacer(2); line(w, "+ toevoegen", 10, new Color((TYPES[type] || TYPES.overzicht).color), true);
   return w;
 }
-
-/* ---------------- invoeren ---------------- */
+ 
+/* ---------------- invoeren (mooi formulier) ---------------- */
 const guessOwnCat = (desc, cats) => { if (/caf|resto|eten|drink|drank|bar|pint|bier|cola|koffie|friet|frit|pizza|lunch|kebab|snack|burger|sushi/i.test(desc || "") && cats.includes("Eten buitenshuis")) return "Eten buitenshuis"; return cats.includes("Vrije tijd") ? "Vrije tijd" : cats[0]; };
 const domainOf = (list, name) => ((list || []).find(c => c.name === name) || {}).domain || "Privé";
-async function pickDate(allowPast) {
-  const opts = allowPast ? ["Vandaag", "Gisteren", "Eergisteren"] : ["Vandaag", "Morgen", "Overmorgen", "Volgende week", "Geen datum"];
-  const i = await choose("Wanneer?", opts); if (i === null) return null;
-  const t = today();
-  return allowPast ? addDays(t, -i) : [t, addDays(t, 1), addDays(t, 2), addDays(t, 7), ""][i];
-}
-async function addKot(settings) {
-  const cats = (settings.kot && settings.kot.cats) || ["Eten", "Drank", "Extra"];
-  const v = await ask("Kot · voorgeschoten", "Bedrag en (optioneel) omschrijving", [{placeholder: "Bedrag, bv. 5,45", decimal: true}, {placeholder: "Omschrijving, bv. Colruyt"}], "Volgende");
-  if (!v) return null; const amount = parseAmount(v[0]); if (!(amount > 0)) { await info("Ongeldig bedrag", "Vul een bedrag in, bv. 5,45"); return null; }
-  const ci = await choose("Categorie", cats); if (ci === null) return null;
-  const item = {id: uid(), date: today(), amount, cat: cats[ci], desc: ucf(v[1].trim()), statementId: "", excluded: false, settled: false};
+ 
+/* opslaan per soort (zelfde gegevens als de app) */
+async function saveKot(d) {
+  const item = {id: uid(), date: d.date || today(), amount: d.amount, cat: d.cat, desc: ucf((d.desc || "").trim()), statementId: "", excluded: false, settled: !!d.settled};
   await pushItem("kot", item);
-  return `Kot · ${cats[ci]} · ${eur(amount)}${item.desc ? " · " + item.desc : ""}`;
+  return `Kot · ${d.cat} · ${eur(d.amount)}${item.desc ? " · " + item.desc : ""}${d.settled ? " · al terugbetaald" : ""}`;
 }
-async function addMoney(settings, kind) {
+async function saveMoney(d, settings, kind) {
   const list = kind === "in" ? (settings.incomeCats || []) : (settings.expenseCats || []);
-  const recent = (kind === "in" ? settings.recentIn : settings.recentOut) || [];
-  const names = list.map(c => c.name); const ordered = [...recent.filter(n => names.includes(n)), ...names.filter(n => !recent.includes(n))];
-  const v = await ask(kind === "in" ? "Inkomst" : "Uitgave", "Bedrag en omschrijving", [{placeholder: "Bedrag", decimal: true}, {placeholder: kind === "in" ? "bv. shift zaterdag" : "bv. Delhaize"}], "Volgende");
-  if (!v) return null; const amount = parseAmount(v[0]); if (!(amount > 0)) { await info("Ongeldig bedrag", "Vul een bedrag in, bv. 12,50"); return null; }
-  const ci = await choose("Categorie", ordered); if (ci === null) return null;
-  const cat = ordered[ci];
-  let hours = null;
-  if (kind === "in" && cat === "Studentenjob") { const h = await ask("Gewerkte uren", "Optioneel", [{placeholder: "bv. 8", decimal: true}]); if (h && h[0]) hours = parseAmount(h[0]) || null; }
-  const date = await pickDate(true); if (date === null) return null;
-  const desc = ucf(v[1].trim()) || cat;
-  const tx = {id: uid(), kind, date, amount, desc, cat, party: "", method: "Bank", domain: domainOf(list, cat), note: "", taskId: "", hours};
-  await pushItem("tx-" + date.slice(0, 7), tx);
-  return `${kind === "in" ? "Inkomst" : "Uitgave"} · ${cat} · ${eur(amount)}`;
+  const desc = ucf((d.desc || "").trim()) || d.cat;
+  const tx = {id: uid(), kind, date: d.date || today(), amount: d.amount, desc, cat: d.cat, party: "", method: "Bank", domain: domainOf(list, d.cat), note: "", taskId: "", hours: kind === "in" && d.cat === "Studentenjob" && d.hours ? d.hours : null};
+  await pushItem("tx-" + tx.date.slice(0, 7), tx);
+  return `${kind === "in" ? "Inkomst" : "Uitgave"} · ${d.cat} · ${eur(d.amount)}${desc !== d.cat ? " · " + desc : ""}`;
 }
-async function addList() {
-  const v = await ask("Lijstje", "Wat wil je doen?", [{placeholder: "bv. boodschappen doen"}], "Volgende");
-  if (!v || !v[0].trim()) return null;
-  const i = await choose("Voor wanneer?", ["Vandaag", "Morgen"]); if (i === null) return null;
-  const date = i === 1 ? addDays(today(), 1) : today();
-  await pushItem("day", {id: uid(), text: ucf(v[0].trim()), date, done: false, taskId: ""});
-  return `Lijstje ${i === 1 ? "morgen" : "vandaag"} · ${ucf(v[0].trim())}`;
+async function saveList(d) {
+  const text = ucf(d.text.trim());
+  await pushItem("day", {id: uid(), text, date: d.date, done: false, taskId: ""});
+  return `Lijstje ${d.date === today() ? "vandaag" : "morgen"} · ${text}`;
 }
-async function addTask(settings) {
-  const v = await ask("Nieuwe taak", "Titel en optioneel een tijd voor een herinnering (bv. 18:00)", [{placeholder: "Wat moet er gebeuren?"}, {placeholder: "Tijd (optioneel)"}], "Volgende");
-  if (!v || !v[0].trim()) return null;
-  const date = await pickDate(false); if (date === null) return null;
-  const cats = settings.taskCats || ["Studie", "Stage", "Klantproject", "Kampen", "Privé"];
-  const ci = await choose("Categorie", cats); if (ci === null) return null;
-  const tm = /^(\d{1,2})[:u.h]?(\d{2})?$/.exec(v[1].trim().toLowerCase()); const time = tm && +tm[1] < 24 ? pad(+tm[1]) + ":" + (tm[2] || "00") : "";
-  const t = {id: uid(), title: ucf(v[0].trim()), deadline: date, cat: cats[ci], type: "indienen", client: "", amount: null, priority: "Middel", status: "Te doen", note: "", reminder: !!time, time};
+async function saveTask(d) {
+  const t = {id: uid(), title: ucf(d.title.trim()), deadline: d.date || "", cat: d.cat, type: "indienen", client: "", amount: null, priority: d.urgent ? "Hoog" : "Middel", status: "Te doen", note: "", reminder: !!d.reminder, time: d.time || ""};
   await pushItem("tasks", t);
-  return `Taak · ${t.title}${date ? " · " + dueLabel(date) : ""}${time ? " om " + time : ""}`;
+  return `Taak · ${t.title}${t.deadline ? " · " + dueLabel(t.deadline) : ""}${t.time ? " om " + t.time : ""}`;
 }
-async function addOthers(settings) {
-  const di = await choose("Wat is het?", ["Voorschot · ik betaalde, zij moeten mij", "Schuld · zij betaalden, ik moet hen"]); if (di === null) return null;
-  const debt = di === 1;
-  const v = await ask(debt ? "Schuld" : "Voorschot", debt ? "Bedrag per persoon, aan wie, waarvoor" : "Bedrag per persoon (of totaal, zie volgende stap), wie, waarvoor", [{placeholder: "Bedrag", decimal: true}, {placeholder: "Wie (meerdere: komma of en)"}, {placeholder: "Waarvoor, bv. café"}], "Volgende");
-  if (!v) return null;
-  let amount = parseAmount(v[0]); const names = v[1].split(/,|\s+en\s+/i).map(capName).filter(Boolean); const desc = v[2].trim();
-  if (!(amount > 0) || !names.length) { await info("Onvolledig", "Vul een bedrag en minstens één naam in."); return null; }
-  const expCats = (settings.expenseCats || []).map(c => c.name); const cat = guessOwnCat(desc, expCats);
-  let withMe = debt;
-  if (!debt) {
-    const s = await choose("Deed je zelf mee?", ["Nee, alleen zij", `Ja, bedrag is per persoon (${eur(amount)}) + mijn deel als uitgave`, `Ja, ${eur(amount)} is het totaal: delen door ${names.length + 1}`]);
-    if (s === null) return null;
-    if (s === 2) amount = r2(amount / (names.length + 1));
-    withMe = s > 0;
-  }
-  const date = today(), month = "tx-" + date.slice(0, 7);
+async function saveOthers(d, settings) {
+  const debt = d.dir === "out", names = d.names, amount = d.amount, desc = (d.desc || "").trim(), date = d.date || today();
+  const cat = d.cat || guessOwnCat(desc, (settings.expenseCats || []).map(c => c.name));
+  const month = "tx-" + date.slice(0, 7);
   const items = names.map(p => ({id: uid(), dir: debt ? "out" : "in", date, amount, person: p, desc, note: "", paid: false, paidDate: ""}));
-  if (withMe) {
+  if (d.withMe) {
     if (debt) {
       const txs = items.map(it => { const tx = {id: uid(), kind: "out", date, amount, desc: `${ucf(desc) || "Schuld"} (betaald door ${it.person})`, cat, party: it.person, method: "Bank", domain: domainOf(settings.expenseCats, cat), note: "Schuld: " + it.person + " schoot voor", taskId: "", hours: null}; it.txId = tx.id; return tx; });
-      await updateDoc(month, d => { d = d || {items: []}; d.items = (d.items || []).concat(txs); return d; });
+      await updateDoc(month, x => { x = x || {items: []}; x.items = (x.items || []).concat(txs); return x; });
     } else {
       const tx = {id: uid(), kind: "out", date, amount, desc: `${ucf(desc) || "Gedeelde rekening"} (mijn deel)`, cat, party: "", method: "Bank", domain: domainOf(settings.expenseCats, cat), note: "Mijn deel, samen met " + names.join(", "), taskId: "", hours: null};
       items.forEach(it => it.shareTxId = tx.id);
       await pushItem(month, tx);
     }
   }
-  await updateDoc("others", d => { d = d || {items: []}; d.items = (d.items || []).concat(items); return d; });
-  return `${debt ? "Schuld aan" : "Voorschot voor"} ${names.join(", ")} · ${eur(amount)}${names.length > 1 ? " p.p." : ""}${withMe ? " · eigen deel als uitgave" : ""}`;
+  await updateDoc("others", x => { x = x || {items: []}; x.items = (x.items || []).concat(items); return x; });
+  return `${debt ? "Schuld aan" : "Voorschot voor"} ${names.join(", ")} · ${eur(amount)}${names.length > 1 ? " p.p." : ""}${d.withMe ? " · eigen deel als uitgave" : ""}`;
 }
+ 
+/* het formulier (HTML in Scriptable) */
+function formHTML(type, ctx) {
+  const T = TYPES[type];
+  return `<!DOCTYPE html><html lang="nl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,viewport-fit=cover">
+<style>
+:root{--bg:#fbfbfa;--surface:#fff;--s2:#f2f2f0;--border:#e5e4e0;--text:#2f2e2b;--t2:#6b6a66;--t3:#9b9a96;--accent:${T.color};--ok:#0a8a0a;--okbg:#e5f3e5;--warn:#c03030}
+@media (prefers-color-scheme:dark){:root{--bg:#141413;--surface:#1f1f1e;--s2:#2a2a28;--border:#363632;--text:#ecebe7;--t2:#b3b2ab;--t3:#85847e;--okbg:#18301a;--ok:#4cc24c;--warn:#f08a8a}}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+body{margin:0;background:var(--bg);color:var(--text);font:16px/1.4 -apple-system,system-ui,sans-serif;padding:18px 18px calc(110px + env(safe-area-inset-bottom))}
+h1{font-size:26px;margin:4px 0 2px;letter-spacing:-.02em;display:flex;align-items:center;gap:10px}
+h1 i{width:12px;height:12px;border-radius:4px;background:var(--accent);display:inline-block}
+.sub{color:var(--t2);font-size:14px;margin-bottom:18px}
+label.l{display:block;font-size:13px;font-weight:600;color:var(--t2);margin:16px 0 6px}
+.amount{width:100%;border:0;border-bottom:2px solid var(--border);background:none;font-size:42px;font-weight:700;letter-spacing:-.02em;color:var(--text);padding:6px 0;font-variant-numeric:tabular-nums}
+.amount:focus{outline:none;border-color:var(--accent)}
+input.t,select.t{width:100%;border:1px solid var(--border);background:var(--surface);color:var(--text);border-radius:12px;padding:12px 14px;font-size:17px}
+input.t:focus{outline:2px solid var(--accent);border-color:transparent}
+.chips{display:flex;flex-wrap:wrap;gap:8px}
+.chip{border:1px solid var(--border);background:var(--surface);color:var(--text);border-radius:999px;padding:9px 15px;font-size:15px;font-weight:500}
+.chip.on{background:var(--text);color:var(--bg);border-color:var(--text)}
+.chip:active,.btn:active,.card:active{transform:scale(.97)}
+.cards{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.card{border:1.5px solid var(--border);background:var(--surface);border-radius:14px;padding:12px;text-align:left;color:var(--text)}
+.card b{display:block;font-size:16px}.card span{font-size:13px;color:var(--t2)}
+.card.on{border-color:var(--text);background:var(--s2)}
+.row{display:flex;gap:8px;align-items:center}
+.split{display:flex;gap:8px;align-items:center;font-size:14px;color:var(--t2)}
+.split input{width:96px;border:1px solid var(--border);background:var(--surface);color:var(--text);border-radius:10px;padding:9px;font-size:16px}
+.check{display:flex;gap:10px;align-items:flex-start;background:var(--s2);border-radius:12px;padding:12px;margin-top:14px;font-size:15px}
+.check input{width:22px;height:22px;margin:0;accent-color:var(--accent)}
+.bar{position:fixed;left:0;right:0;bottom:0;padding:12px 18px calc(12px + env(safe-area-inset-bottom));background:linear-gradient(transparent,var(--bg) 30%)}
+.btn{width:100%;border:0;border-radius:14px;padding:16px;font-size:18px;font-weight:700;background:var(--text);color:var(--bg)}
+.btn:disabled{opacity:.35}
+.err{color:var(--warn);font-size:14px;min-height:20px;margin-top:10px}
+.done{display:none;text-align:center;padding:40px 10px}
+.done .tick{width:64px;height:64px;border-radius:50%;background:var(--okbg);color:var(--ok);display:grid;place-items:center;font-size:34px;margin:0 auto 14px}
+.done p{color:var(--t2);margin:6px 0 22px}
+.hidden{display:none}
+</style></head><body>
+<form id="f" autocomplete="off" onsubmit="return false">
+<h1><i></i>${T.label === "Voorschot" ? "Voorschot of schuld" : T.label}</h1><div class="sub" id="sub"></div>
+<div id="fields"></div>
+<div class="err" id="err"></div>
+<div class="bar"><button class="btn" id="save" type="submit">Opslaan</button></div>
+</form>
+<div class="done" id="done"><div class="tick">✓</div><h2 style="margin:0">Opgeslagen</h2><p id="doneTxt"></p>
+<div class="bar" style="position:static;background:none;padding:0"><button class="btn" id="again">Nog één toevoegen</button><p style="font-size:13px;color:var(--t3);margin-top:14px">Klaar? Veeg dit venster naar beneden.</p></div></div>
+<script>
+const CTX = ${JSON.stringify(ctx)}, TYPE = ${JSON.stringify(type)};
+const $ = s => document.querySelector(s);
+const st = {cat: CTX.defaultCat || "", date: CTX.today, dir: "in", settled: false, urgent: false};
+const parseAmount = s => { s = String(s || "").trim().replace(/[€\\s]/g, ""); if (s.includes(",")) s = s.replace(/\\./g, "").replace(",", "."); const v = parseFloat(s); return isFinite(v) ? Math.round(v * 100) / 100 : NaN; };
+const esc = s => String(s).replace(/[&<>"]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+const chips = (name, opts, cur) => '<div class="chips" data-g="' + name + '">' + opts.map(o => '<button type="button" class="chip' + (o[0] === cur ? " on" : "") + '" data-v="' + esc(o[0]) + '">' + esc(o[1]) + '</button>').join("") + '</div>';
+const dates = (past) => past ? [[CTX.today, "Vandaag"], [CTX.yesterday, "Gisteren"], [CTX.dayBefore, "Eergisteren"]] : [[CTX.today, "Vandaag"], [CTX.tomorrow, "Morgen"], [CTX.dayAfter, "Overmorgen"], [CTX.nextWeek, "Volgende week"], ["", "Geen datum"]];
+function draw() {
+  let h = "";
+  if (TYPE === "kot") { $("#sub").textContent = "Voorgeschoten voor " + CTX.recipient;
+    h = '<input class="amount" id="amount" inputmode="decimal" placeholder="€ 0,00">' +
+      '<label class="l">Categorie</label>' + chips("cat", CTX.cats.map(c => [c, c]), st.cat) +
+      '<label class="l">Omschrijving (optioneel)</label><input class="t" id="desc" placeholder="bv. Colruyt">' +
+      '<label class="l">Wanneer</label>' + chips("date", dates(true), st.date) +
+      '<label class="check"><input type="checkbox" id="settled"><span>Al terugbetaald door ' + esc(CTX.recipient) + '</span></label>';
+  } else if (TYPE === "uitgave" || TYPE === "inkomst") { $("#sub").textContent = TYPE === "inkomst" ? "Geld dat binnenkwam" : "Iets dat je zelf betaalde";
+    h = '<input class="amount" id="amount" inputmode="decimal" placeholder="€ 0,00">' +
+      '<label class="l">Omschrijving</label><input class="t" id="desc" placeholder="' + (TYPE === "inkomst" ? "bv. shift zaterdag" : "bv. Delhaize") + '">' +
+      '<label class="l">Categorie</label>' + chips("cat", CTX.cats.map(c => [c, c]), st.cat) +
+      '<div id="hoursWrap" class="' + (st.cat === "Studentenjob" ? "" : "hidden") + '"><label class="l">Gewerkte uren</label><input class="t" id="hours" inputmode="decimal" placeholder="bv. 8"></div>' +
+      '<label class="l">Wanneer</label>' + chips("date", dates(true), st.date);
+  } else if (TYPE === "lijstje") { $("#sub").textContent = "Kort iets voor vandaag of morgen";
+    h = '<input class="t" id="text" placeholder="bv. boodschappen doen" style="font-size:20px;padding:14px">' +
+      '<label class="l">Voor wanneer</label>' + chips("date", [[CTX.today, "Vandaag"], [CTX.tomorrow, "Morgen"]], st.date);
+  } else if (TYPE === "taak") { $("#sub").textContent = "Met deadline en eventueel een herinnering";
+    h = '<input class="t" id="title" placeholder="Wat moet er gebeuren?" style="font-size:20px;padding:14px">' +
+      '<label class="l">Deadline</label>' + chips("date", dates(false), st.date) +
+      '<label class="l">Herinnering om (optioneel)</label><input class="t" id="time" type="time">' +
+      '<label class="l">Categorie</label>' + chips("cat", CTX.cats.map(c => [c, c]), st.cat) +
+      '<label class="check"><input type="checkbox" id="urgent"><span>Dringend (prioriteit Hoog)</span></label>';
+  } else if (TYPE === "voorschot") { $("#sub").textContent = "Met vrienden of anderen";
+    h = '<div class="cards"><button type="button" class="card' + (st.dir === "in" ? " on" : "") + '" data-dir="in"><b>Voorschot</b><span>Ik betaalde · zij moeten mij</span></button><button type="button" class="card' + (st.dir === "out" ? " on" : "") + '" data-dir="out"><b>Schuld</b><span>Zij betaalden · ik moet hen</span></button></div>' +
+      '<label class="l">Bedrag per persoon</label><input class="amount" id="amount" inputmode="decimal" placeholder="€ 0,00" style="font-size:36px">' +
+      '<div class="split" style="margin-top:10px">Rekening delen: <input id="tot" inputmode="decimal" placeholder="totaal €"> ÷ <input id="n" inputmode="numeric" placeholder="pers." style="width:70px"></div>' +
+      '<label class="l" id="whoL">' + (st.dir === "out" ? "Aan wie moet je terugbetalen" : "Wie moet jou terugbetalen") + '</label><input class="t" id="names" placeholder="bv. Lotte, Jens">' +
+      (CTX.persons.length ? '<div class="chips" style="margin-top:8px" id="pp">' + CTX.persons.slice(0, 10).map(p => '<button type="button" class="chip" data-p="' + esc(p) + '">' + esc(p) + '</button>').join("") + '</div>' : "") +
+      '<label class="l">Waarvoor</label><input class="t" id="desc" placeholder="bv. café, tickets">' +
+      '<label class="check"><input type="checkbox" id="withMe"' + (st.dir === "out" ? " checked" : "") + '><span id="withMeL">' + (st.dir === "out" ? "Ook als uitgave bij Financiën (het was voor jezelf)" : "Ik deed zelf ook mee: mijn deel als uitgave") + '</span></label>' +
+      '<label class="l">Categorie van de uitgave</label><select class="t" id="cat">' + CTX.expenseCats.map(c => '<option' + (c === CTX.ownCat ? " selected" : "") + '>' + esc(c) + '</option>').join("") + '</select>';
+  }
+  $("#fields").innerHTML = h; wire(); validate();
+  const first = $("#amount") || $("#text") || $("#title"); if (first) setTimeout(() => first.focus(), 250);
+}
+function wire() {
+  document.querySelectorAll("[data-g]").forEach(g => g.addEventListener("click", e => { const b = e.target.closest(".chip"); if (!b) return; st[g.dataset.g] = b.dataset.v; g.querySelectorAll(".chip").forEach(x => x.classList.toggle("on", x === b)); if (g.dataset.g === "cat" && $("#hoursWrap")) $("#hoursWrap").classList.toggle("hidden", b.dataset.v !== "Studentenjob"); validate(); }));
+  document.querySelectorAll("[data-dir]").forEach(b => b.addEventListener("click", () => { st.dir = b.dataset.dir; document.querySelectorAll("[data-dir]").forEach(x => x.classList.toggle("on", x === b)); $("#whoL").textContent = st.dir === "out" ? "Aan wie moet je terugbetalen" : "Wie moet jou terugbetalen"; $("#withMeL").textContent = st.dir === "out" ? "Ook als uitgave bij Financiën (het was voor jezelf)" : "Ik deed zelf ook mee: mijn deel als uitgave"; $("#withMe").checked = st.dir === "out" || parseInt(($("#n") || {}).value, 10) > 1; }));
+  const calc = () => { const t = parseAmount($("#tot").value), n = parseInt($("#n").value, 10); if (t > 0 && n > 1) { $("#amount").value = (Math.round(t / n * 100) / 100).toFixed(2).replace(".", ","); $("#withMe").checked = true; } validate(); };
+  if ($("#tot")) { $("#tot").addEventListener("input", calc); $("#n").addEventListener("input", calc); }
+  if ($("#pp")) $("#pp").addEventListener("click", e => { const b = e.target.closest("[data-p]"); if (!b) return; const cur = $("#names").value.split(/,|\\s+en\\s+/i).map(s => s.trim()).filter(Boolean); if (!cur.some(c => c.toLowerCase() === b.dataset.p.toLowerCase())) cur.push(b.dataset.p); $("#names").value = cur.join(", "); b.classList.add("on"); validate(); });
+  if ($("#desc") && $("#cat") && $("#cat").tagName === "SELECT") { let touched = false; $("#cat").addEventListener("change", () => touched = true); $("#desc").addEventListener("input", () => { if (!touched && /caf|resto|eten|drink|drank|bar|pint|bier|cola|koffie|friet|frit|pizza|lunch|kebab|snack|burger|sushi/i.test($("#desc").value) && CTX.expenseCats.includes("Eten buitenshuis")) $("#cat").value = "Eten buitenshuis"; }); }
+  document.querySelectorAll("input").forEach(i => i.addEventListener("input", validate));
+}
+function collect() {
+  const d = {date: st.date};
+  if ($("#amount")) d.amount = parseAmount($("#amount").value);
+  if (TYPE === "kot") { d.cat = st.cat; d.desc = $("#desc").value; d.settled = $("#settled").checked; if (!(d.amount > 0)) return "Vul een bedrag in, bv. 5,45"; if (!d.cat) return "Kies een categorie"; }
+  if (TYPE === "uitgave" || TYPE === "inkomst") { d.cat = st.cat; d.desc = $("#desc").value; d.hours = $("#hours") ? parseAmount($("#hours").value) || null : null; if (!(d.amount > 0)) return "Vul een bedrag in"; if (!d.cat) return "Kies een categorie"; }
+  if (TYPE === "lijstje") { d.text = $("#text").value; if (!d.text.trim()) return "Wat wil je doen?"; }
+  if (TYPE === "taak") { d.title = $("#title").value; d.time = $("#time").value; d.reminder = !!d.time; d.cat = st.cat; d.urgent = $("#urgent").checked; if (!d.title.trim()) return "Wat moet er gebeuren?"; if (!d.cat) return "Kies een categorie"; }
+  if (TYPE === "voorschot") { d.dir = st.dir; d.names = $("#names").value.split(/,|\\s+en\\s+/i).map(s => s.trim().replace(/\\s+/g, " ").replace(/(^|\\s)\\S/g, m => m.toUpperCase())).filter(Boolean); d.desc = $("#desc").value; d.withMe = $("#withMe").checked; d.cat = $("#cat").value; if (!(d.amount > 0)) return "Vul een bedrag in"; if (!d.names.length) return st.dir === "out" ? "Aan wie?" : "Voor wie?"; }
+  return d;
+}
+function validate() { const d = collect(); $("#save").disabled = typeof d === "string"; $("#err").textContent = ""; return d; }
+let CB = null, PENDING = null;
+window.LO = {
+  wait(cb) { CB = cb; if (PENDING) { const p = PENDING; PENDING = null; CB = null; cb(p); } },
+  done(label) { $("#f").style.display = "none"; $("#done").style.display = "block"; $("#doneTxt").textContent = label; $("#save").disabled = false; $("#save").textContent = "Opslaan"; },
+  fail(msg) { $("#err").textContent = msg; $("#save").disabled = false; $("#save").textContent = "Opslaan"; }
+};
+$("#f").addEventListener("submit", () => { const d = collect(); if (typeof d === "string") { $("#err").textContent = d; return; } $("#save").disabled = true; $("#save").textContent = "Opslaan…"; const json = JSON.stringify(d); if (CB) { const c = CB; CB = null; c(json); } else PENDING = json; });
+$("#again").addEventListener("click", () => { $("#done").style.display = "none"; $("#f").style.display = "block"; st.settled = false; st.date = CTX.today; draw(); });
+draw();
+</script></body></html>`;
+}
+ 
 async function runAdd(type) {
   if (!await token()) { if (!await setup()) return; }
-  let settings = {}; try { settings = (await getDoc("settings")).data || {}; } catch (e) { await info("Geen verbinding", "Controleer je internet en probeer opnieuw."); return; }
-  while (true) {
-    let label = null;
+  let settings = {}, others = [];
+  try { const [s, o] = await Promise.all([getDoc("settings"), getDoc("others")]); settings = s.data || {}; others = (o.data && o.data.items) || []; }
+  catch (e) { await info("Geen verbinding", "Controleer je internet en probeer opnieuw."); return; }
+  const t = today(), exp = (settings.expenseCats || []).map(c => c.name), inc = (settings.incomeCats || []).map(c => c.name);
+  const order = (names, recent) => [...(recent || []).filter(n => names.includes(n)), ...names.filter(n => !(recent || []).includes(n))];
+  const pc = {}; others.forEach(i => pc[i.person] = (pc[i.person] || 0) + 1);
+  const ctx = {today: t, yesterday: addDays(t, -1), dayBefore: addDays(t, -2), tomorrow: addDays(t, 1), dayAfter: addDays(t, 2), nextWeek: addDays(t, 7),
+    recipient: (settings.kot && settings.kot.recipient) || "mama", persons: Object.keys(pc).sort((a, b) => pc[b] - pc[a]), expenseCats: exp, ownCat: exp.includes("Vrije tijd") ? "Vrije tijd" : exp[0]};
+  if (type === "kot") { ctx.cats = (settings.kot && settings.kot.cats) || ["Eten", "Drank", "Extra"]; ctx.defaultCat = ctx.cats[0]; }
+  if (type === "uitgave") { ctx.cats = order(exp, settings.recentOut); ctx.defaultCat = (settings.recentOut || [])[0] || ""; }
+  if (type === "inkomst") { ctx.cats = order(inc, settings.recentIn); ctx.defaultCat = (settings.recentIn || [])[0] || ""; }
+  if (type === "taak") { ctx.cats = settings.taskCats || ["Studie", "Stage", "Klantproject", "Kampen", "Privé"]; ctx.defaultCat = ctx.cats.includes("Privé") ? "Privé" : ctx.cats[0]; }
+  const wv = new WebView();
+  await wv.loadHTML(formHTML(type, ctx));
+  let closed = false; const shown = wv.present(false).then(() => { closed = true; });
+  while (!closed) {
+    const res = await Promise.race([wv.evaluateJavaScript("LO.wait(completion)", true), shown.then(() => null)]);
+    if (!res || closed) break;
+    const d = JSON.parse(res);
     try {
-      if (type === "kot") label = await addKot(settings);
-      else if (type === "uitgave") label = await addMoney(settings, "out");
-      else if (type === "inkomst") label = await addMoney(settings, "in");
-      else if (type === "lijstje") label = await addList();
-      else if (type === "taak") label = await addTask(settings);
-      else if (type === "voorschot") label = await addOthers(settings);
-    } catch (e) { await info("Opslaan mislukt", String(e.message || e)); return; }
-    if (!label) return;
-    const a = new Alert(); a.title = "Opgeslagen ✓"; a.message = label; a.addAction("Klaar"); a.addAction("Nog één toevoegen");
-    if (await a.presentAlert() !== 1) return;
+      let label;
+      if (type === "kot") label = await saveKot(d);
+      else if (type === "uitgave") label = await saveMoney(d, settings, "out");
+      else if (type === "inkomst") label = await saveMoney(d, settings, "in");
+      else if (type === "lijstje") label = await saveList(d);
+      else if (type === "taak") label = await saveTask(d);
+      else if (type === "voorschot") label = await saveOthers(d, settings);
+      if (closed) break;
+      await wv.evaluateJavaScript(`LO.done(${JSON.stringify(label)})`, false);
+    } catch (e) {
+      if (closed) break;
+      await wv.evaluateJavaScript(`LO.fail(${JSON.stringify("Opslaan mislukt: " + (e.message || e))})`, false);
+    }
   }
 }
+ 
 async function menu() {
   const keys = ["kot", "uitgave", "inkomst", "lijstje", "taak", "voorschot"];
   const opts = keys.map(k => "+ " + TYPES[k].label).concat(["Life OS openen", kcGet("refresh") ? "Opnieuw koppelen / ander account" : "Koppelen met Life OS"]);
@@ -307,7 +413,7 @@ async function menu() {
   if (i === keys.length) return Safari.open(APP_URL + "#snel");
   await setup();
 }
-
+ 
 /* ---------------- start ---------------- */
 if (config.runsInWidget) {
   const type = (args.widgetParameter || "overzicht").trim().toLowerCase();
@@ -317,3 +423,4 @@ if (config.runsInWidget) {
   if (TYPES[q] && q !== "overzicht") await runAdd(q); else await menu();
 }
 Script.complete();
+ 
