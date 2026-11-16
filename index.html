@@ -2547,6 +2547,15 @@ document.addEventListener("dragover", e => { const col = e.target.closest && e.t
 document.addEventListener("drop", e => { const col = e.target.closest && e.target.closest("[data-drop]"); if (!col) return; e.preventDefault(); const t = S.tasks.find(x => x.id === e.dataTransfer.getData("text/plain")); if (t && t.status !== col.dataset.drop) { t.status = col.dataset.drop; saveTask(t); } });
 let rzT; window.addEventListener("resize", () => { clearTimeout(rzT); rzT = setTimeout(afterRender, 150); });
 document.addEventListener("keydown", e => { if (e.key === "Escape") { closeModal(true); closeFab(); } });
+/* app opnieuw geopend na een tijdje weg: terug naar het gekozen startscherm */
+(() => { let hiddenAt = 0; const standalone = () => (window.matchMedia && matchMedia("(display-mode: standalone)").matches) || navigator.standalone === true;
+  document.addEventListener("visibilitychange", () => {
+    if (document.hidden) { hiddenAt = Date.now(); return; }
+    if (!standalone() || !hiddenAt || Date.now() - hiddenAt < 60000) return;
+    if (document.querySelector("dialog[open], .modal.open, .sheet.open")) return;
+    const v = startView(); if (UI.view !== v) { try { history.replaceState(null, "", "#" + v); } catch(e) {} go(v); }
+  });
+})();
 window.addEventListener("hashchange", () => { const h = location.hash.slice(1); if ((VIEWS.some(v => v[0] === h) || h === "snel") && h !== UI.view) { UI.view = h; render(); } });
 const themePref = () => { try { return localStorage.getItem("lifeos-theme") || "system"; } catch(e) { return "system"; } };
 function applyTheme(t){
