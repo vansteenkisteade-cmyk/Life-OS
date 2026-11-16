@@ -156,7 +156,11 @@ function stats(D) {
 const dueLabel = d => { const t = today(); if (d === t) return "vandaag"; if (d === addDays(t, 1)) return "morgen"; return d.slice(8, 10) + "/" + d.slice(5, 7); };
  
 /* ---------------- widget tekenen ---------------- */
-const C = {bg: Color.dynamic(new Color("#ffffff"), new Color("#1c1c1e")), text: Color.dynamic(new Color("#2f2e2b"), new Color("#ecebe7")), muted: Color.dynamic(new Color("#6b6a66"), new Color("#a5a49e"))};
+/* thema: zet in de widget-parameter "licht" of "donker" achter het type, bv. "kot donker" */
+const WPARAM = String((typeof args !== "undefined" && args.widgetParameter) || "").trim().toLowerCase();
+const THEME = /\b(donker|dark|zwart)\b/.test(WPARAM) ? "dark" : /\b(licht|light|wit)\b/.test(WPARAM) ? "light" : "auto";
+const dyn = (l, d) => THEME === "light" ? l : THEME === "dark" ? d : Color.dynamic(l, d);
+const C = {bg: dyn(new Color("#ffffff"), new Color("#1c1c1e")), text: dyn(new Color("#2f2e2b"), new Color("#ecebe7")), muted: dyn(new Color("#6b6a66"), new Color("#a5a49e"))};
 const tint = type => { const c = (TYPES[type] || TYPES.overzicht).color; return c === "#2f2e2b" ? C.text : new Color(c); };
 const runUrl = type => `scriptable:///run/${encodeURIComponent(Script.name())}?type=${type}`;
 function header(w, type, size) {
@@ -214,8 +218,8 @@ function smallWidget(w, type, S) {
  
 /* middelgrote en grote widget: overzicht + snelknoppen */
 const RED = new Color("#e5484d");
-const soft = (t, a) => { const c = (TYPES[t] || TYPES.overzicht).color; return c === "#2f2e2b" ? Color.dynamic(new Color("#2f2e2b", a), new Color("#ecebe7", a)) : new Color(c, a); };
-const SURF = Color.dynamic(new Color("#f4f4f2"), new Color("#2a2a2c"));
+const soft = (t, a) => { const c = (TYPES[t] || TYPES.overzicht).color; return c === "#2f2e2b" ? dyn(new Color("#2f2e2b", a), new Color("#ecebe7", a)) : new Color(c, a); };
+const SURF = dyn(new Color("#f4f4f2"), new Color("#2a2a2c"));
 function sym(st, name, size, color) { const i = st.addImage(SFSymbol.named(name).image); i.imageSize = new Size(size, size); i.tintColor = color; return i; }
 function txt(st, s, size, color, weight) {
   const t = st.addText(s); t.font = weight === 7 ? Font.boldSystemFont(size) : weight === 6 ? Font.semiboldSystemFont(size) : weight === 5 ? Font.mediumSystemFont(size) : Font.systemFont(size);
@@ -536,7 +540,7 @@ async function menu() {
  
 /* ---------------- start ---------------- */
 if (config.runsInWidget) {
-  const type = (args.widgetParameter || "overzicht").trim().toLowerCase();
+  const type = (WPARAM.replace(/\b(donker|dark|zwart|licht|light|wit)\b/g, "").trim().split(/\s+/)[0]) || "overzicht";
   Script.setWidget(await buildWidget(TYPES[type] ? type : "overzicht"));
 } else {
   const q = (args.queryParameters && args.queryParameters.type) || "";
