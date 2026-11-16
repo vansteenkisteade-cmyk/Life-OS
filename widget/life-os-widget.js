@@ -149,7 +149,7 @@ function stats(D) {
     in: r2(D.tx.filter(x => x.kind === "in").reduce((a, x) => a + x.amount, 0)),
     list: D.day.filter(i => !i.done && i.date === t),
     late: openTasks.filter(x => x.deadline < t).length,
-    next: openTasks.filter(x => x.deadline >= t).slice(0, 3),
+    next: openTasks.filter(x => x.deadline >= t).slice(0, 6),
     get, owe
   };
 }
@@ -157,10 +157,12 @@ const dueLabel = d => { const t = today(); if (d === t) return "vandaag"; if (d 
  
 /* ---------------- widget tekenen ---------------- */
 const C = {bg: Color.dynamic(new Color("#ffffff"), new Color("#1c1c1e")), text: Color.dynamic(new Color("#2f2e2b"), new Color("#ecebe7")), muted: Color.dynamic(new Color("#6b6a66"), new Color("#a5a49e"))};
+const tint = type => { const c = (TYPES[type] || TYPES.overzicht).color; return c === "#2f2e2b" ? C.text : new Color(c); };
+const runUrl = type => `scriptable:///run/${encodeURIComponent(Script.name())}?type=${type}`;
 function header(w, type, size) {
   const T = TYPES[type] || TYPES.overzicht;
   const st = w.addStack(); st.centerAlignContent();
-  const img = st.addImage(SFSymbol.named(T.symbol).image); img.imageSize = new Size(size, size); img.tintColor = new Color(T.color);
+  const img = st.addImage(SFSymbol.named(T.symbol).image); img.imageSize = new Size(size, size); img.tintColor = tint(type);
   st.addSpacer(6);
   const tx = st.addText(T.label); tx.font = Font.boldSystemFont(size * 0.8); tx.textColor = C.text;
 }
@@ -172,18 +174,7 @@ async function buildWidget(type) {
   if (!kcGet("refresh")) { header(w, type, 18); w.addSpacer(); line(w, "Tik om te koppelen", 12, C.muted); w.url = `scriptable:///run/${encodeURIComponent(Script.name())}`; return w; }
   let S = null; try { S = stats(await loadAll()); } catch (e) { S = null; }
   const fam = config.widgetFamily || "small";
-  if (type === "overzicht" || fam === "medium" || fam === "large") {
-    header(w, "overzicht", 16); w.addSpacer(8);
-    if (!S) { line(w, "Geen verbinding", 12); return w; }
-    line(w, S.list.length ? `Lijstje: ${S.list.slice(0, 3).map(i => i.text).join(", ")}` : "Lijstje: niets voor vandaag", 12, C.text);
-    w.addSpacer(4);
-    if (S.next.length) S.next.slice(0, fam === "large" ? 3 : 2).forEach(x => line(w, `• ${x.title} · ${dueLabel(x.deadline)}`, 12, C.text));
-    else line(w, "Geen deadlines", 12);
-    if (S.late) line(w, `${S.late} te laat`, 12, new Color("#d03b3b"), true);
-    w.addSpacer();
-    line(w, `Kot ${eur(S.kot)}${S.get ? ` · anderen +${eur(S.get)}` : ""}${S.owe ? ` · jij −${eur(S.owe)}` : ""}`, 11);
-    return w;
-  }
+  if (type === "overzicht" || fam === "medium" || fam === "large") { await bigWidget(w, S, fam); return w; }
   header(w, type, 20); w.addSpacer();
   const big = (txt) => line(w, txt, 22, C.text, true);
   if (!S) { line(w, "Tik om toe te voegen", 12); return w; }
@@ -195,6 +186,69 @@ async function buildWidget(type) {
   else if (type === "voorschot") { big(`+${eur(S.get)}`); line(w, S.owe ? `jij moet ${eur(S.owe)}` : "te krijgen", 11); }
   w.addSpacer(2); line(w, "+ toevoegen", 10, new Color((TYPES[type] || TYPES.overzicht).color), true);
   return w;
+}
+ 
+ 
+/* middelgrote en grote widget: overzicht + snelknoppen */
+function section(st, title) { const t = st.addText(title.toUpperCase()); t.font = Font.semiboldSystemFont(9); t.textColor = C.muted; st.addSpacer(3); }
+function item(st, text, sub, size, color) {
+  const r = st.addStack(); r.centerAlignContent();
+  const a = r.addText(text); a.font = Font.systemFont(size); a.textColor = color || C.text; a.lineLimit = 1; a.minimumScaleFactor = 0.8;
+  if (sub) { r.addSpacer(4); const b = r.addText(sub); b.font = Font.systemFont(size - 1); b.textColor = C.muted; b.lineLimit = 1; }
+  st.addSpacer(2);
+}
+function statTile(st, type, value, label) {
+  const b = st.addStack(); b.layoutVertically(); b.url = runUrl(type);
+  b.backgroundColor = Color.dynamic(new Color("#f2f2f0"), new Color("#2c2c2e")); b.cornerRadius = 10; b.setPadding(5, 8, 5, 8);
+  const v = b.addText(value); v.font = Font.boldSystemFont(14); v.textColor = C.text; v.lineLimit = 1; v.minimumScaleFactor = 0.6;
+  const l = b.addText(label); l.font = Font.systemFont(9); l.textColor = C.muted; l.lineLimit = 1;
+  return b;
+}
+function buttons(w, types) {
+  const row = w.addStack(); row.spacing = 6;
+  types.forEach(t => {
+    const b = row.addStack(); b.url = runUrl(t); b.centerAlignContent();
+    b.backgroundColor = Color.dynamic(new Color("#f2f2f0"), new Color("#2c2c2e")); b.cornerRadius = 9; b.setPadding(5, 6, 5, 6);
+    b.addSpacer();
+    const img = b.addImage(SFSymbol.named(TYPES[t].symbol).image); img.imageSize = new Size(11, 11); img.tintColor = tint(t);
+    b.addSpacer(3);
+    const tx = b.addText(TYPES[t].label); tx.font = Font.semiboldSystemFont(10); tx.textColor = C.text; tx.lineLimit = 1; tx.minimumScaleFactor = 0.7;
+    b.addSpacer();
+  });
+}
+async function bigWidget(w, S, fam) {
+  const large = fam === "large";
+  w.url = APP_URL;
+  const top = w.addStack(); top.centerAlignContent();
+  const img = top.addImage(SFSymbol.named(TYPES.overzicht.symbol).image); img.imageSize = new Size(14, 14); img.tintColor = C.text;
+  top.addSpacer(5); const ttl = top.addText("Life OS"); ttl.font = Font.boldSystemFont(13); ttl.textColor = C.text;
+  top.addSpacer();
+  const d = top.addText(new Date().toLocaleDateString("nl-BE", {weekday: "short", day: "numeric", month: "short"})); d.font = Font.systemFont(10); d.textColor = C.muted;
+  w.addSpacer(large ? 10 : 5);
+  if (!large) w.setPadding(12, 14, 10, 14);
+  if (!S) { item(w, "Geen verbinding, tik om opnieuw te proberen", null, 12, C.muted); w.addSpacer(); return; }
+  const body = w.addStack(); body.topAlignContent();
+  const left = body.addStack(); left.layoutVertically();
+  section(left, "Lijstje vandaag");
+  const nL = large ? 5 : 2;
+  if (S.list.length) S.list.slice(0, nL).forEach(i => item(left, "○ " + i.text, null, 12));
+  else item(left, "Niets meer te doen", null, 12, C.muted);
+  if (large && S.list.length > nL) item(left, `+${S.list.length - nL} meer`, null, 10, C.muted);
+  left.addSpacer(large ? 10 : 4);
+  section(left, !large && S.late && S.next.length ? `Deadlines · ${S.late} te laat` : "Deadlines");
+  const nD = large ? 6 : 1;
+  if (S.late && large) item(left, `${S.late} te laat`, null, 12, new Color("#d03b3b"));
+  if (S.next.length) S.next.slice(0, nD).forEach(x => item(left, x.title, dueLabel(x.deadline), 12));
+  else if (!S.late || !large) item(left, S.late ? `${S.late} te laat` : "Geen deadlines", null, 12, S.late ? new Color("#d03b3b") : C.muted);
+  body.addSpacer();
+  const right = body.addStack(); right.layoutVertically(); right.spacing = large ? 6 : 4; right.size = new Size(large ? 120 : 104, 0);
+  statTile(right, "kot", eur(S.kot), large ? "kot · terug van mama" : "kot (mama)");
+  if (large || !(S.get || S.owe)) statTile(right, "uitgave", eur(S.out), "uitgegeven deze maand");
+  if (S.get || S.owe) statTile(right, "voorschot", S.get ? "+" + eur(S.get) : "−" + eur(S.owe), S.get ? (S.owe && large ? `te krijgen · jij −${eur(S.owe)}` : large ? "te krijgen van anderen" : "te krijgen") : "jij moet nog");
+  if (large) statTile(right, "inkomst", eur(S.in), "verdiend deze maand");
+  w.addSpacer();
+  buttons(w, large ? ["kot", "uitgave", "taak", "lijstje"] : ["kot", "uitgave", "taak", "lijstje"]);
+  if (large) { w.addSpacer(6); buttons(w, ["inkomst", "voorschot"]); }
 }
  
 /* ---------------- invoeren (mooi formulier) ---------------- */
