@@ -389,6 +389,10 @@ input.t:focus{outline:2px solid var(--accent);border-color:transparent}
 .done .tick{width:64px;height:64px;border-radius:50%;background:var(--okbg);color:var(--ok);display:grid;place-items:center;font-size:34px;margin:0 auto 14px}
 .done p{color:var(--t2);margin:6px 0 22px}
 .hidden{display:none}
+.pick{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-top:10px;border:1px solid var(--border);background:var(--surface);border-radius:12px;padding:8px 12px;font-size:15px;color:var(--t2)}
+.hint{font-size:12px;color:var(--t3);margin-top:6px}
+.pick.on{border-color:var(--text);color:var(--text)}
+.pick input{border:0;background:none;color:var(--text);font-size:16px;font-family:inherit;text-align:right;min-width:0}
 .seg3{display:grid;grid-template-columns:repeat(3,1fr);gap:4px;background:var(--s2);border-radius:12px;padding:4px;margin-bottom:18px}
 .seg3 button{border:0;background:none;color:var(--t2);border-radius:9px;padding:10px 4px;font-size:14px;font-weight:600}
 .seg3 button.on{background:var(--surface);color:var(--text);box-shadow:0 1px 3px rgba(0,0,0,.15)}
@@ -420,22 +424,24 @@ function draw() {
     h = '<input class="amount" id="amount" inputmode="decimal" placeholder="€ 0,00">' +
       '<label class="l">Categorie</label>' + chips("cat", CTX.cats.map(c => [c, c]), st.cat) +
       '<label class="l">Omschrijving (optioneel)</label><input class="t" id="desc" placeholder="bv. Colruyt">' +
-      '<label class="l">Wanneer</label>' + chips("date", dates(true), st.date) +
+      '<label class="l">Wanneer</label>' + chips("date", dates(true), st.date) + '<div class="pick"><span>Andere datum</span><input type="date" id="customDate" max="' + CTX.today + '"></div>' +
       '<label class="check"><input type="checkbox" id="settled"><span>Al terugbetaald door ' + esc(CTX.recipient) + '</span></label>';
   } else if (TYPE === "uitgave" || TYPE === "inkomst") { $("#sub").textContent = TYPE === "inkomst" ? "Geld dat binnenkwam" : "Iets dat je zelf betaalde";
     h = '<input class="amount" id="amount" inputmode="decimal" placeholder="€ 0,00">' +
       '<label class="l">Omschrijving</label><input class="t" id="desc" placeholder="' + (TYPE === "inkomst" ? "bv. shift zaterdag" : "bv. Delhaize") + '">' +
       '<label class="l">Categorie</label>' + chips("cat", CTX.cats.map(c => [c, c]), st.cat) +
       '<div id="hoursWrap" class="' + (st.cat === "Studentenjob" ? "" : "hidden") + '"><label class="l">Gewerkte uren</label><input class="t" id="hours" inputmode="decimal" placeholder="bv. 8"></div>' +
-      '<label class="l">Wanneer</label>' + chips("date", dates(true), st.date);
+      '<label class="l">Wanneer</label>' + chips("date", dates(true), st.date) + '<div class="pick"><span>Andere datum</span><input type="date" id="customDate" max="' + CTX.today + '"></div>';
   } else if (TYPE === "lijstje") { $("#sub").textContent = "Kort iets voor vandaag of morgen";
     h = '<input class="t" id="text" placeholder="bv. boodschappen doen" style="font-size:20px;padding:14px">' +
       '<label class="l">Voor wanneer</label>' + chips("date", [[CTX.today, "Vandaag"], [CTX.tomorrow, "Morgen"]], st.date);
   } else if (TYPE === "taak") { $("#sub").textContent = "Met deadline en eventueel een herinnering";
     h = '<input class="t" id="title" placeholder="Wat moet er gebeuren?" style="font-size:20px;padding:14px">' +
-      '<label class="l">Deadline</label>' + chips("date", dates(false), st.date) +
+      '<label class="l">Deadline</label><div class="pick on"><span>Datum</span><input type="date" id="deadline" value="' + CTX.today + '" min="' + CTX.today + '"></div>' +
+      '<div class="hint">Leeg maken = geen deadline</div>' +
       '<label class="l">Herinnering om (optioneel)</label><input class="t" id="time" type="time">' +
-      '<label class="l">Categorie</label>' + chips("cat", CTX.cats.map(c => [c, c]), st.cat) +
+      '<label class="l">Categorie</label>' + chips("cat", CTX.cats.map(c => [c, c]).concat([["__new", "+ Nieuwe"]]), st.cat) +
+      '<input class="t hidden" id="newCat" placeholder="Naam nieuwe categorie" style="margin-top:8px">' +
       '<label class="check"><input type="checkbox" id="urgent"><span>Dringend (prioriteit Hoog)</span></label>';
   } else if (TYPE === "voorschot") { $("#sub").textContent = "Met vrienden of anderen";
     h = (ORIG === "kot" ? "" : '<div class="cards"><button type="button" class="card' + (st.dir === "in" ? " on" : "") + '" data-dir="in"><b>Voorschot</b><span>Ik betaalde · zij moeten mij</span></button><button type="button" class="card' + (st.dir === "out" ? " on" : "") + '" data-dir="out"><b>Schuld</b><span>Zij betaalden · ik moet hen</span></button></div>') +
@@ -454,7 +460,9 @@ function draw() {
 }
 function wire() {
   document.querySelectorAll("[data-sw]").forEach(b => b.addEventListener("click", () => { const v = b.dataset.sw; if (v === "kot") TYPE = "kot"; else { TYPE = "voorschot"; st.dir = v; } draw(); }));
-  document.querySelectorAll("[data-g]").forEach(g => g.addEventListener("click", e => { const b = e.target.closest(".chip"); if (!b) return; st[g.dataset.g] = b.dataset.v; g.querySelectorAll(".chip").forEach(x => x.classList.toggle("on", x === b)); if (g.dataset.g === "cat" && $("#hoursWrap")) $("#hoursWrap").classList.toggle("hidden", b.dataset.v !== "Studentenjob"); validate(); }));
+  const cd = $("#customDate");
+  if (cd) cd.addEventListener("change", () => { if (!cd.value) return; st.date = cd.value; document.querySelectorAll('[data-g="date"] .chip').forEach(x => x.classList.remove("on")); cd.parentNode.classList.add("on"); validate(); });
+  document.querySelectorAll("[data-g]").forEach(g => g.addEventListener("click", e => { const b = e.target.closest(".chip"); if (!b) return; st[g.dataset.g] = b.dataset.v; if ($("#newCat")) { const nw = b.dataset.v === "__new"; $("#newCat").classList.toggle("hidden", !(g.dataset.g === "cat" ? nw : !$("#newCat").classList.contains("hidden"))); if (g.dataset.g === "cat" && nw) setTimeout(() => $("#newCat").focus(), 50); } if (g.dataset.g === "date" && cd) { cd.value = ""; cd.parentNode.classList.remove("on"); } g.querySelectorAll(".chip").forEach(x => x.classList.toggle("on", x === b)); if (g.dataset.g === "cat" && $("#hoursWrap")) $("#hoursWrap").classList.toggle("hidden", b.dataset.v !== "Studentenjob"); validate(); }));
   document.querySelectorAll("[data-dir]").forEach(b => b.addEventListener("click", () => { st.dir = b.dataset.dir; document.querySelectorAll("[data-dir]").forEach(x => x.classList.toggle("on", x === b)); $("#whoL").textContent = st.dir === "out" ? "Aan wie moet je terugbetalen" : "Wie moet jou terugbetalen"; $("#withMeL").textContent = st.dir === "out" ? "Ook als uitgave bij Financiën (het was voor jezelf)" : "Ik deed zelf ook mee: mijn deel als uitgave"; $("#withMe").checked = st.dir === "out" || parseInt(($("#n") || {}).value, 10) > 1; }));
   const calc = () => { const t = parseAmount($("#tot").value), n = parseInt($("#n").value, 10); if (t > 0 && n > 1) { $("#amount").value = (Math.round(t / n * 100) / 100).toFixed(2).replace(".", ","); $("#withMe").checked = true; } validate(); };
   if ($("#tot")) { $("#tot").addEventListener("input", calc); $("#n").addEventListener("input", calc); }
@@ -468,7 +476,8 @@ function collect() {
   if (TYPE === "kot") { d.cat = st.cat; d.desc = $("#desc").value; d.settled = $("#settled").checked; if (!(d.amount > 0)) return "Vul een bedrag in, bv. 5,45"; if (!d.cat) return "Kies een categorie"; }
   if (TYPE === "uitgave" || TYPE === "inkomst") { d.cat = st.cat; d.desc = $("#desc").value; d.hours = $("#hours") ? parseAmount($("#hours").value) || null : null; if (!(d.amount > 0)) return "Vul een bedrag in"; if (!d.cat) return "Kies een categorie"; }
   if (TYPE === "lijstje") { d.text = $("#text").value; if (!d.text.trim()) return "Wat wil je doen?"; }
-  if (TYPE === "taak") { d.title = $("#title").value; d.time = $("#time").value; d.reminder = !!d.time; d.cat = st.cat; d.urgent = $("#urgent").checked; if (!d.title.trim()) return "Wat moet er gebeuren?"; if (!d.cat) return "Kies een categorie"; }
+  if (TYPE === "taak") { d.title = $("#title").value; d.date = $("#deadline").value || ""; d.time = $("#time").value; d.reminder = !!d.time; d.cat = st.cat;
+    if (d.cat === "__new") { d.cat = $("#newCat").value.trim().replace(/^./, c => c.toUpperCase()); d.newCat = true; if (!d.cat) return "Geef je nieuwe categorie een naam"; } d.urgent = $("#urgent").checked; if (!d.title.trim()) return "Wat moet er gebeuren?"; if (!d.cat) return "Kies een categorie"; }
   if (TYPE === "voorschot") { d.dir = st.dir; d.names = $("#names").value.split(/,|\\s+en\\s+/i).map(s => s.trim().replace(/\\s+/g, " ").replace(/(^|\\s)\\S/g, m => m.toUpperCase())).filter(Boolean); d.desc = $("#desc").value; d.withMe = $("#withMe").checked; d.cat = $("#cat").value; if (!(d.amount > 0)) return "Vul een bedrag in"; if (!d.names.length) return st.dir === "out" ? "Aan wie?" : "Voor wie?"; }
   return d;
 }
@@ -480,7 +489,7 @@ window.LO = {
   fail(msg) { $("#err").textContent = msg; $("#save").disabled = false; $("#save").textContent = "Opslaan"; }
 };
 $("#f").addEventListener("submit", () => { const d = collect(); if (typeof d === "string") { $("#err").textContent = d; return; } $("#save").disabled = true; $("#save").textContent = "Opslaan…"; const json = JSON.stringify(d); if (CB) { const c = CB; CB = null; c(json); } else PENDING = json; });
-$("#again").addEventListener("click", () => { $("#done").style.display = "none"; $("#f").style.display = "block"; st.settled = false; st.date = CTX.today; draw(); });
+$("#again").addEventListener("click", () => { $("#done").style.display = "none"; $("#f").style.display = "block"; st.settled = false; st.date = CTX.today; $("#fields").innerHTML = ""; draw(); });
 draw();
 </script></body></html>`;
 }
@@ -498,7 +507,7 @@ async function runAdd(type) {
   if (type === "kot") { ctx.cats = (settings.kot && settings.kot.cats) || ["Eten", "Drank", "Extra"]; ctx.defaultCat = ctx.cats[0]; }
   if (type === "uitgave") { ctx.cats = order(exp, settings.recentOut); ctx.defaultCat = (settings.recentOut || [])[0] || ""; }
   if (type === "inkomst") { ctx.cats = order(inc, settings.recentIn); ctx.defaultCat = (settings.recentIn || [])[0] || ""; }
-  if (type === "taak") { ctx.cats = settings.taskCats || ["Studie", "Stage", "Klantproject", "Kampen", "Privé"]; ctx.defaultCat = ctx.cats.includes("Privé") ? "Privé" : ctx.cats[0]; }
+  if (type === "taak") { ctx.cats = [...new Set([...(settings.taskCats || []), "Studie", "Stage", "Klantproject", "Kampen", "Privé"])]; ctx.defaultCat = ctx.cats.includes("Privé") ? "Privé" : ctx.cats[0]; }
   const wv = new WebView(), html = formHTML(type, ctx);
   let closed = false; const shown = wv.present(false).then(() => { closed = true; });
   let ready = false;
@@ -513,6 +522,7 @@ async function runAdd(type) {
     try {
       let label;
       const k = d.kind || type;
+      if (k === "taak" && d.newCat) { await updateDoc("settings", x => { x = x || {}; const l = x.taskCats || []; if (!l.includes(d.cat)) x.taskCats = l.concat(d.cat); return x; }); }
       if (k === "kot") label = await saveKot(d);
       else if (k === "uitgave") label = await saveMoney(d, settings, "out");
       else if (k === "inkomst") label = await saveMoney(d, settings, "in");
