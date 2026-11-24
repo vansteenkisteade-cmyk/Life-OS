@@ -336,7 +336,19 @@ async function saveOthers(d, settings) {
   const debt = d.dir === "out", names = d.names, amount = d.amount, desc = (d.desc || "").trim(), date = d.date || today();
   const cat = d.cat || guessOwnCat(desc, (settings.expenseCats || []).map(c => c.name));
   const month = "tx-" + date.slice(0, 7);
-  const items = names.map(p => ({id: uid(), dir: debt ? "out" : "in", date, amount, person: p, desc, note: "", paid: false, paidDate: ""}));
+  const items = d.per && d.per.length
+    ? d.per.map(p => ({id: uid(), dir: "in", date, amount: p.amount, person: p.name, desc, note: "", paid: false, paidDate: ""}))
+    : names.map(p => ({id: uid(), dir: debt ? "out" : "in", date, amount, person: p, desc, note: "", paid: false, paidDate: ""}));
+  if (d.per && d.per.length) {
+    const own = Math.round((d.total - d.per.reduce((a, p) => a + p.amount, 0)) * 100) / 100;
+    if (d.withMe && own > 0) {
+      const tx = {id: uid(), kind: "out", date, amount: own, desc: `${ucf(desc) || "Gedeelde rekening"} (mijn deel)`, cat, party: "", method: "Bank", domain: domainOf(settings.expenseCats, cat), note: `Mijn deel van ${eur(d.total)}, samen met ${names.join(", ")}`, taskId: "", hours: null};
+      items.forEach(it => it.shareTxId = tx.id);
+      await pushItem(month, tx);
+    }
+    await updateDoc("others", x => { x = x || {items: []}; x.items = (x.items || []).concat(items); return x; });
+    return `Voorschot · ${d.per.map(p => p.name + " " + eur(p.amount)).join(", ")}${d.withMe && own > 0 ? " · jouw deel " + eur(own) : ""}`;
+  }
   if (d.withMe) {
     if (debt) {
       const txs = items.map(it => { const tx = {id: uid(), kind: "out", date, amount, desc: `${ucf(desc) || "Schuld"} (betaald door ${it.person})`, cat, party: it.person, method: "Bank", domain: domainOf(settings.expenseCats, cat), note: "Schuld: " + it.person + " schoot voor", taskId: "", hours: null}; it.txId = tx.id; return tx; });
@@ -389,6 +401,12 @@ input.t:focus{outline:2px solid var(--accent);border-color:transparent}
 .done .tick{width:64px;height:64px;border-radius:50%;background:var(--okbg);color:var(--ok);display:grid;place-items:center;font-size:34px;margin:0 auto 14px}
 .done p{color:var(--t2);margin:6px 0 22px}
 .hidden{display:none}
+.prow{display:grid;grid-template-columns:1fr 110px 40px;gap:8px;margin-bottom:8px;align-items:center}
+.prow .t{padding:11px 12px}.prow .pa{text-align:right;font-variant-numeric:tabular-nums}
+.prow .x{border:0;background:var(--s2);color:var(--t2);border-radius:10px;height:44px;font-size:20px}
+.mine{margin-top:14px;background:var(--s2);border-radius:12px;padding:12px 14px;font-size:15px;color:var(--t2);display:flex;justify-content:space-between;align-items:baseline;gap:10px;flex-wrap:wrap}
+.mine b{color:var(--text);font-size:20px;font-variant-numeric:tabular-nums}.mine span{font-size:12px;color:var(--t3)}
+.mine.bad,.mine.bad b{color:var(--warn)}
 .pick{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-top:10px;border:1px solid var(--border);background:var(--surface);border-radius:12px;padding:8px 12px;font-size:15px;color:var(--t2)}
 .hint{font-size:12px;color:var(--t3);margin-top:6px}
 .pick.on{border-color:var(--text);color:var(--text)}
@@ -410,11 +428,30 @@ input.t:focus{outline:2px solid var(--accent);border-color:transparent}
 const CTX = ${JSON.stringify(ctx)}, ORIG = ${JSON.stringify(type)}; let TYPE = ORIG;
 const TITLES = {kot:"Kot",uitgave:"Uitgave",inkomst:"Inkomst",lijstje:"Lijstje",taak:"Taak",voorschot:"Voorschot of schuld"};
 const $ = s => document.querySelector(s);
-const st = {cat: CTX.defaultCat || "", date: CTX.today, dir: "in", settled: false, urgent: false};
+const st = {cat: CTX.defaultCat || "", date: CTX.today, dir: "in", settled: false, urgent: false, split: "gelijk"};
 const parseAmount = s => { s = String(s || "").trim().replace(/[€\\s]/g, ""); if (s.includes(",")) s = s.replace(/\\./g, "").replace(",", "."); const v = parseFloat(s); return isFinite(v) ? Math.round(v * 100) / 100 : NaN; };
 const esc = s => String(s).replace(/[&<>"]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
 const chips = (name, opts, cur) => '<div class="chips" data-g="' + name + '">' + opts.map(o => '<button type="button" class="chip' + (o[0] === cur ? " on" : "") + '" data-v="' + esc(o[0]) + '">' + esc(o[1]) + '</button>').join("") + '</div>';
 const dates = (past) => past ? [[CTX.today, "Vandaag"], [CTX.yesterday, "Gisteren"], [CTX.dayBefore, "Eergisteren"]] : [[CTX.today, "Vandaag"], [CTX.tomorrow, "Morgen"], [CTX.dayAfter, "Overmorgen"], [CTX.nextWeek, "Volgende week"], ["", "Geen datum"]];
+function splitSeg() { return '<div class="seg3" style="grid-template-columns:1fr 1fr;margin-top:14px">' + [["gelijk", "Iedereen evenveel"], ["apart", "Elk een ander bedrag"]].map(o => '<button type="button" data-split="' + o[0] + '" class="' + (st.split === o[0] ? "on" : "") + '">' + o[1] + '</button>').join("") + '</div>'; }
+const fmt = v => "€ " + (Math.round(v * 100) / 100).toFixed(2).replace(".", ",");
+function addRow(name) {
+  const r = document.createElement("div"); r.className = "prow";
+  r.innerHTML = '<input class="t pn" placeholder="Naam"><input class="t pa" inputmode="decimal" placeholder="€ 0,00"><button type="button" class="x" aria-label="Verwijderen">×</button>';
+  if (name) r.querySelector(".pn").value = name;
+  r.querySelector(".x").addEventListener("click", () => { r.remove(); calcMine(); validate(); });
+  r.querySelectorAll("input").forEach(i => i.addEventListener("input", () => { calcMine(); validate(); }));
+  $("#rows").appendChild(r); (name ? r.querySelector(".pa") : r.querySelector(".pn")).focus(); calcMine();
+}
+function rowsData() { return Array.from(document.querySelectorAll(".prow")).map(r => ({name: r.querySelector(".pn").value.trim().replace(/\\s+/g, " ").replace(/(^|\\s)\\S/g, m => m.toUpperCase()), amount: parseAmount(r.querySelector(".pa").value)})); }
+function calcMine() {
+  const m = $("#mine"); if (!m) return;
+  const tot = parseAmount($("#total").value), sum = rowsData().reduce((a, r) => a + (r.amount > 0 ? r.amount : 0), 0);
+  if (!(tot > 0)) { m.textContent = "Vul eerst het totaal in"; m.className = "mine"; return; }
+  const mine = Math.round((tot - sum) * 100) / 100;
+  if (mine < -0.004) { m.innerHTML = "Samen <b>" + fmt(sum) + "</b>, dat is meer dan het totaal"; m.className = "mine bad"; }
+  else { m.innerHTML = "Jouw deel <b>" + fmt(mine) + "</b><span>" + fmt(tot) + " − " + fmt(sum) + " van anderen</span>"; m.className = "mine"; }
+}
 function draw() {
   let h = ""; const keepAmt = $("#amount") ? $("#amount").value : "", keepDesc = $("#desc") ? $("#desc").value : "";
   $("#ttl").textContent = ORIG === "kot" ? (TYPE === "kot" ? "Kot" : st.dir === "out" ? "Schuld bij iemand" : "Voorschot voor iemand") : TITLES[TYPE];
@@ -443,8 +480,19 @@ function draw() {
       '<label class="l">Categorie</label>' + chips("cat", CTX.cats.map(c => [c, c]).concat([["__new", "+ Nieuwe"]]), st.cat) +
       '<input class="t hidden" id="newCat" placeholder="Naam nieuwe categorie" style="margin-top:8px">' +
       '<label class="check"><input type="checkbox" id="urgent"><span>Dringend (prioriteit Hoog)</span></label>';
+  } else if (TYPE === "voorschot" && st.dir === "in" && st.split === "apart") { $("#sub").textContent = "Elk een ander bedrag";
+    h = (ORIG === "kot" ? "" : '<div class="cards"><button type="button" class="card on" data-dir="in"><b>Voorschot</b><span>Ik betaalde · zij moeten mij</span></button><button type="button" class="card" data-dir="out"><b>Schuld</b><span>Zij betaalden · ik moet hen</span></button></div>') +
+      splitSeg() +
+      '<label class="l">Totaal van de rekening</label><input class="amount" id="total" inputmode="decimal" placeholder="€ 0,00" style="font-size:36px">' +
+      '<label class="l">Wie moet jou wat terugbetalen</label><div id="rows"></div>' +
+      '<div class="chips" style="margin-top:8px"><button type="button" class="chip" id="addRow">+ Persoon</button>' + CTX.persons.slice(0, 8).map(p => '<button type="button" class="chip" data-p="' + esc(p) + '">' + esc(p) + '</button>').join("") + '</div>' +
+      '<div class="mine" id="mine"></div>' +
+      '<label class="l">Waarvoor</label><input class="t" id="desc" placeholder="bv. café, boodschappen">' +
+      '<label class="check"><input type="checkbox" id="withMe" checked><span>Mijn deel als uitgave bij Financiën</span></label>' +
+      '<label class="l">Categorie van de uitgave</label><select class="t" id="cat">' + CTX.expenseCats.map(c => '<option' + (c === CTX.ownCat ? " selected" : "") + '>' + esc(c) + '</option>').join("") + '</select>';
   } else if (TYPE === "voorschot") { $("#sub").textContent = "Met vrienden of anderen";
     h = (ORIG === "kot" ? "" : '<div class="cards"><button type="button" class="card' + (st.dir === "in" ? " on" : "") + '" data-dir="in"><b>Voorschot</b><span>Ik betaalde · zij moeten mij</span></button><button type="button" class="card' + (st.dir === "out" ? " on" : "") + '" data-dir="out"><b>Schuld</b><span>Zij betaalden · ik moet hen</span></button></div>') +
+      (st.dir === "in" ? splitSeg() : "") +
       '<label class="l">Bedrag per persoon</label><input class="amount" id="amount" inputmode="decimal" placeholder="€ 0,00" style="font-size:36px">' +
       '<div class="split" style="margin-top:10px">Rekening delen: <input id="tot" inputmode="decimal" placeholder="totaal €"> ÷ <input id="n" inputmode="numeric" placeholder="pers." style="width:70px"></div>' +
       '<label class="l" id="whoL">' + (st.dir === "out" ? "Aan wie moet je terugbetalen" : "Wie moet jou terugbetalen") + '</label><input class="t" id="names" placeholder="bv. Lotte, Jens">' +
@@ -463,9 +511,12 @@ function wire() {
   const cd = $("#customDate");
   if (cd) cd.addEventListener("change", () => { if (!cd.value) return; st.date = cd.value; document.querySelectorAll('[data-g="date"] .chip').forEach(x => x.classList.remove("on")); cd.parentNode.classList.add("on"); validate(); });
   document.querySelectorAll("[data-g]").forEach(g => g.addEventListener("click", e => { const b = e.target.closest(".chip"); if (!b) return; st[g.dataset.g] = b.dataset.v; if ($("#newCat")) { const nw = b.dataset.v === "__new"; $("#newCat").classList.toggle("hidden", !(g.dataset.g === "cat" ? nw : !$("#newCat").classList.contains("hidden"))); if (g.dataset.g === "cat" && nw) setTimeout(() => $("#newCat").focus(), 50); } if (g.dataset.g === "date" && cd) { cd.value = ""; cd.parentNode.classList.remove("on"); } g.querySelectorAll(".chip").forEach(x => x.classList.toggle("on", x === b)); if (g.dataset.g === "cat" && $("#hoursWrap")) $("#hoursWrap").classList.toggle("hidden", b.dataset.v !== "Studentenjob"); validate(); }));
-  document.querySelectorAll("[data-dir]").forEach(b => b.addEventListener("click", () => { st.dir = b.dataset.dir; document.querySelectorAll("[data-dir]").forEach(x => x.classList.toggle("on", x === b)); $("#whoL").textContent = st.dir === "out" ? "Aan wie moet je terugbetalen" : "Wie moet jou terugbetalen"; $("#withMeL").textContent = st.dir === "out" ? "Ook als uitgave bij Financiën (het was voor jezelf)" : "Ik deed zelf ook mee: mijn deel als uitgave"; $("#withMe").checked = st.dir === "out" || parseInt(($("#n") || {}).value, 10) > 1; }));
+  document.querySelectorAll("[data-dir]").forEach(b => b.addEventListener("click", () => { st.dir = b.dataset.dir; draw(); }));
+  document.querySelectorAll("[data-split]").forEach(b => b.addEventListener("click", () => { st.split = b.dataset.split; draw(); }));
+  if ($("#rows")) { $("#addRow").addEventListener("click", () => addRow("")); if (!$("#rows").children.length) addRow(""); $("#total").addEventListener("input", calcMine); setTimeout(() => $("#total").focus(), 250); }
   const calc = () => { const t = parseAmount($("#tot").value), n = parseInt($("#n").value, 10); if (t > 0 && n > 1) { $("#amount").value = (Math.round(t / n * 100) / 100).toFixed(2).replace(".", ","); $("#withMe").checked = true; } validate(); };
   if ($("#tot")) { $("#tot").addEventListener("input", calc); $("#n").addEventListener("input", calc); }
+  document.querySelectorAll("[data-p]").forEach(b => { if (!$("#rows")) return; b.addEventListener("click", () => { const empty = Array.from(document.querySelectorAll(".prow .pn")).find(i => !i.value.trim()); if (empty) { empty.value = b.dataset.p; empty.parentNode.querySelector(".pa").focus(); } else addRow(b.dataset.p); b.classList.add("on"); validate(); }); });
   if ($("#pp")) $("#pp").addEventListener("click", e => { const b = e.target.closest("[data-p]"); if (!b) return; const cur = $("#names").value.split(/,|\\s+en\\s+/i).map(s => s.trim()).filter(Boolean); if (!cur.some(c => c.toLowerCase() === b.dataset.p.toLowerCase())) cur.push(b.dataset.p); $("#names").value = cur.join(", "); b.classList.add("on"); validate(); });
   if ($("#desc") && $("#cat") && $("#cat").tagName === "SELECT") { let touched = false; $("#cat").addEventListener("change", () => touched = true); $("#desc").addEventListener("input", () => { if (!touched && /caf|resto|eten|drink|drank|bar|pint|bier|cola|koffie|friet|frit|pizza|lunch|kebab|snack|burger|sushi/i.test($("#desc").value) && CTX.expenseCats.includes("Eten buitenshuis")) $("#cat").value = "Eten buitenshuis"; }); }
   document.querySelectorAll("input").forEach(i => i.addEventListener("input", validate));
@@ -478,6 +529,14 @@ function collect() {
   if (TYPE === "lijstje") { d.text = $("#text").value; if (!d.text.trim()) return "Wat wil je doen?"; }
   if (TYPE === "taak") { d.title = $("#title").value; d.date = $("#deadline").value || ""; d.time = $("#time").value; d.reminder = !!d.time; d.cat = st.cat;
     if (d.cat === "__new") { d.cat = $("#newCat").value.trim().replace(/^./, c => c.toUpperCase()); d.newCat = true; if (!d.cat) return "Geef je nieuwe categorie een naam"; } d.urgent = $("#urgent").checked; if (!d.title.trim()) return "Wat moet er gebeuren?"; if (!d.cat) return "Kies een categorie"; }
+  if (TYPE === "voorschot" && $("#rows")) {
+    d.dir = "in"; d.total = parseAmount($("#total").value); d.per = rowsData().filter(r => r.name && r.amount > 0); d.names = d.per.map(r => r.name); d.amount = d.total;
+    d.desc = $("#desc").value; d.withMe = $("#withMe").checked; d.cat = $("#cat").value;
+    if (!(d.total > 0)) return "Vul het totaal in";
+    if (!d.per.length) return "Vul minstens één persoon met een bedrag in";
+    if (d.per.reduce((a, r) => a + r.amount, 0) > d.total + 0.004) return "De bedragen samen zijn meer dan het totaal";
+    return d;
+  }
   if (TYPE === "voorschot") { d.dir = st.dir; d.names = $("#names").value.split(/,|\\s+en\\s+/i).map(s => s.trim().replace(/\\s+/g, " ").replace(/(^|\\s)\\S/g, m => m.toUpperCase())).filter(Boolean); d.desc = $("#desc").value; d.withMe = $("#withMe").checked; d.cat = $("#cat").value; if (!(d.amount > 0)) return "Vul een bedrag in"; if (!d.names.length) return st.dir === "out" ? "Aan wie?" : "Voor wie?"; }
   return d;
 }
