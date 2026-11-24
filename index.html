@@ -341,6 +341,12 @@ input.inp:focus-visible,select.inp:focus-visible,textarea.inp:focus-visible{outl
 .net.get{background:var(--income-soft);color:var(--income-text)}
 .net.owe{background:var(--expense-soft);color:var(--text)}
 .net.even{background:var(--surface-2);color:var(--text-2)}
+.seg.full{display:grid;grid-template-columns:1fr 1fr;width:100%;margin-bottom:12px}.seg.full button{padding:8px 6px}
+.prow{display:grid;grid-template-columns:1fr 110px 36px;gap:8px;margin-bottom:8px;align-items:center}.prow .pa{text-align:right;font-variant-numeric:tabular-nums}
+.prow .x{border:0;background:var(--surface-2);color:var(--text-2);border-radius:8px;height:36px;font-size:16px}
+.minebox{margin-top:10px;background:var(--surface-2);border-radius:12px;padding:10px 12px;display:flex;justify-content:space-between;align-items:baseline;gap:10px;flex-wrap:wrap;color:var(--text-2);font-size:14px}
+.minebox b{color:var(--text);font-size:18px;font-variant-numeric:tabular-nums}.minebox span{font-size:12px;color:var(--text-3)}
+.minebox.bad,.minebox.bad b{color:var(--warn-text)}
 .dirpick{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:14px}
 .dirpick button{display:flex;flex-direction:column;align-items:flex-start;gap:2px;text-align:left;padding:10px 12px;border-radius:12px;border:1.5px solid var(--border);background:var(--surface);transition:border-color 150ms ease,background-color 150ms ease,transform 160ms var(--ease-out)}
 .dirpick button:active{transform:scale(.98)}
@@ -1962,11 +1968,21 @@ function othersForm(existing, dirPreset){
   openModal(`<h2><span data-otitle>${existing ? (dir === "out" ? "Schuld bewerken" : "Voorschot bewerken") : "Voorschot of schuld"}</span><button class="btn sm ghost" data-x aria-label="Sluiten">✕</button></h2>
     <form autocomplete="off">
       <div class="dirpick" role="group" aria-label="Wat is het?"><button type="button" data-dir="in" aria-pressed="${dir === "in"}"><strong>Voorschot</strong><span>Ik betaalde · zij moeten mij</span></button><button type="button" data-dir="out" aria-pressed="${dir === "out"}"><strong>Schuld</strong><span>Zij betaalden · ik moet hen</span></button></div>
+      ${existing ? "" : `<div class="seg full" role="group" aria-label="Verdeling" data-splitseg ${dir === "out" ? "hidden" : ""}><button type="button" data-split="gelijk" aria-pressed="true">Iedereen evenveel</button><button type="button" data-split="apart" aria-pressed="false">Elk een ander bedrag</button></div>
+      <div data-apart hidden>
+        <input class="amount-inp" name="atotal" inputmode="decimal" placeholder="€ 0,00 totaal" aria-label="Totaal van de rekening">
+        <p class="small muted" style="margin:10px 0 6px">Wie moet jou wat terugbetalen</p>
+        <div data-rows></div>
+        <div class="chips" style="margin-top:4px"><button type="button" class="chip" data-addrow>+ Persoon</button>${persons.slice(0, 8).map(p => `<button type="button" class="chip" data-ap="${esc(p)}">${esc(p)}</button>`).join("")}</div>
+        <div class="minebox" data-mine>Vul eerst het totaal in</div>
+      </div>`}
+      <div data-eq>
       <input class="amount-inp" name="amount" inputmode="decimal" placeholder="€ 0,00${existing ? "" : " per persoon"}" value="${t.amount != null ? (+t.amount).toFixed(2).replace(".", ",") : ""}" aria-label="Bedrag">
       ${existing ? "" : `<div class="splitcalc"><span class="small muted">Rekening delen:</span><input class="inp" name="total" inputmode="decimal" placeholder="totaal €"><span class="small muted">÷</span><input class="inp" name="n" inputmode="numeric" placeholder="pers."><span class="small muted" data-splitres>incl. jezelf</span></div>`}
       <label class="f" style="margin-top:12px"><span data-wholabel>${dir === "out" ? "Aan wie moet je terugbetalen" : "Wie moet jou terugbetalen"}${existing ? "" : " (meerdere: komma of “en”)"}</span><input class="inp" name="person" value="${esc(t.person)}" placeholder="bv. Lotte" list="personlist" required></label>
       <datalist id="personlist">${persons.map(p => `<option value="${esc(p)}">`).join("")}</datalist>
       ${persons.length && !existing ? `<div class="chips" style="margin-top:8px">${persons.slice(0, 8).map(p => `<button type="button" class="chip" data-pp="${esc(p)}">${esc(p)}</button>`).join("")}</div>` : ""}
+      </div>
       <div class="formgrid" style="margin-top:12px">
         <label class="f">Waarvoor<input class="inp" name="desc" value="${esc(t.desc)}" placeholder="bv. café, tickets"></label>
         <label class="f">Datum<input class="inp" type="date" name="date" value="${t.date}"></label>
@@ -1983,7 +1999,28 @@ function othersForm(existing, dirPreset){
     </form>`, sh => {
     const form = sh.querySelector("form");
     sh.querySelector("[data-x]").onclick = () => closeModal();
-    sh.querySelectorAll("[data-dir]").forEach(b => b.onclick = () => { dir = b.dataset.dir; sh.querySelectorAll("[data-dir]").forEach(x => x.setAttribute("aria-pressed", x === b));
+    let split = "gelijk";
+    const setSplit = v => { split = dir === "out" ? "gelijk" : v; const seg = sh.querySelector("[data-splitseg]"); if (!seg) return;
+      seg.hidden = dir === "out"; seg.querySelectorAll("[data-split]").forEach(x => x.setAttribute("aria-pressed", x.dataset.split === split));
+      sh.querySelector("[data-apart]").hidden = split !== "apart"; sh.querySelector("[data-eq]").hidden = split === "apart"; form.person.required = split !== "apart";
+      if (split === "apart") { if (!sh.querySelector(".prow")) addRow(""); form.own.checked = true; setTimeout(() => form.atotal.focus(), 30); } calcMine(); };
+    const rowsData = () => [...sh.querySelectorAll(".prow")].map(r => ({name: capName(r.querySelector(".pn").value), amount: parseAmount(r.querySelector(".pa").value || "")}));
+    const calcMine = () => { const m = sh.querySelector("[data-mine]"); if (!m) return; const tot = parseAmount(form.atotal.value || ""), sum = rowsData().reduce((a, r) => a + (r.amount > 0 ? r.amount : 0), 0);
+      if (!(tot > 0)) { m.className = "minebox"; m.textContent = "Vul eerst het totaal in"; return; }
+      const mine = r2(tot - sum);
+      if (mine < -0.004) { m.className = "minebox bad"; m.innerHTML = `Samen <b>${eur(sum)}</b>, meer dan het totaal`; }
+      else { m.className = "minebox"; m.innerHTML = `Jouw deel <b>${eur(mine)}</b><span>${eur(tot)} − ${eur(sum)} van anderen</span>`; } };
+    const addRow = name => { const r = document.createElement("div"); r.className = "prow";
+      r.innerHTML = `<input class="inp pn" placeholder="Naam" list="personlist"><input class="inp pa" inputmode="decimal" placeholder="€ 0,00"><button type="button" class="x" aria-label="Verwijderen">✕</button>`;
+      if (name) r.querySelector(".pn").value = name;
+      r.querySelector(".x").onclick = () => { r.remove(); calcMine(); }; r.querySelectorAll("input").forEach(i => i.oninput = calcMine);
+      sh.querySelector("[data-rows]").appendChild(r); (name ? r.querySelector(".pa") : r.querySelector(".pn")).focus(); calcMine(); };
+    if (sh.querySelector("[data-splitseg]")) {
+      sh.querySelectorAll("[data-split]").forEach(b => b.onclick = () => setSplit(b.dataset.split));
+      sh.querySelector("[data-addrow]").onclick = () => addRow("");
+      sh.querySelectorAll("[data-ap]").forEach(b => b.onclick = () => { const empty = [...sh.querySelectorAll(".prow .pn")].find(i => !i.value.trim()); if (empty) { empty.value = b.dataset.ap; empty.parentNode.querySelector(".pa").focus(); } else addRow(b.dataset.ap); b.setAttribute("aria-pressed", "true"); calcMine(); });
+      form.atotal.oninput = calcMine; }
+    sh.querySelectorAll("[data-dir]").forEach(b => b.onclick = () => { dir = b.dataset.dir; sh.querySelectorAll("[data-dir]").forEach(x => x.setAttribute("aria-pressed", x === b)); setSplit(split);
       sh.querySelector("[data-otitle]").textContent = existing ? (dir === "out" ? "Schuld bewerken" : "Voorschot bewerken") : "Voorschot of schuld";
       sh.querySelector("[data-wholabel]").textContent = (dir === "out" ? "Aan wie moet je terugbetalen" : "Wie moet jou terugbetalen") + (existing ? "" : " (meerdere: komma of “en”)");
       const pl = sh.querySelector("[data-paidlabel]"); if (pl) pl.textContent = dir === "out" ? "Afgelost" : "Terugbetaald";
@@ -1999,6 +2036,18 @@ function othersForm(existing, dirPreset){
       toast(ltx ? "Verwijderd (ook de uitgave)" : "Verwijderd", () => { K.items.push(old); if (ltx) S.tx.push(ltx); persist(["others", ...(ltx ? txNamesFor(ltx.date) : [])]); render(); }); };
     const own = sh.querySelector("[data-oown]"); if (own) own.onclick = () => othersToOwn(t.id);
     form.onsubmit = e => { e.preventDefault(); const fd = new FormData(form);
+      if (!existing && split === "apart" && dir === "in") {
+        const err = sh.querySelector("[data-err]"), tot = parseAmount(form.atotal.value || ""), per = rowsData().filter(r => r.name && r.amount > 0), sum = r2(per.reduce((a, r) => a + r.amount, 0));
+        if (!(tot > 0)) { err.textContent = "Vul het totaal van de rekening in."; return; }
+        if (!per.length) { err.textContent = "Vul minstens één persoon met een bedrag in."; return; }
+        if (sum > tot + 0.004) { err.textContent = "De bedragen samen zijn meer dan het totaal."; return; }
+        const K = othersData(), date = fd.get("date") || todayISO(), desc = (fd.get("desc") || "").trim(), mine = r2(tot - sum);
+        const added = per.map(p => ({id:uid(), dir:"in", date, amount:p.amount, person:p.name, desc, note:"", paid:false, paidDate:""}));
+        const txs = [];
+        if (form.own.checked && mine > 0) { const tx = addOwnTx(mine, date, `${ucf(desc) || "Gedeelde rekening"} (mijn deel)`, form.owncat.value, `Mijn deel van ${eur(tot)}, samen met ${per.map(p => p.name).join(", ")}`); added.forEach(it => it.shareTxId = tx.id); txs.push(tx); }
+        K.items.push(...added); persist(["others", ...txNamesFor(...txs.map(x => x.date))]); closeModal(); render();
+        return toast(`Voorschot voor ${per.map(p => `${p.name} ${eur(p.amount)}`).join(", ")}${txs.length ? ` · jouw deel ${eur(mine)} als uitgave` : ""}`, () => { const ids = new Set(added.map(a => a.id)), tids = new Set(txs.map(x => x.id)); K.items = K.items.filter(i => !ids.has(i.id)); S.tx = S.tx.filter(x => !tids.has(x.id)); persist(["others", ...txNamesFor(...txs.map(x => x.date))]); render(); });
+      }
       const amount = parseAmount(fd.get("amount") || ""), names = String(fd.get("person") || "").split(/,|\s+en\s+/i).map(capName).filter(Boolean);
       const err = sh.querySelector("[data-err]");
       if (!(amount > 0)) { err.textContent = "Vul een bedrag in."; return; }
