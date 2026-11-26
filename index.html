@@ -462,6 +462,20 @@ input.inp:focus-visible,select.inp:focus-visible,textarea.inp:focus-visible{outl
   @starting-style{.sheet{opacity:0;transform:none}}
   .scrim.closing .sheet{opacity:0;transform:none;transition:opacity 150ms ease}
 }
+.stagehero{padding:18px 20px}
+.stagebig{font-size:40px;font-weight:700;letter-spacing:-.03em;line-height:1.05;font-variant-numeric:tabular-nums}.stagebig span{font-size:18px;color:var(--text-3);font-weight:600;letter-spacing:0}
+.stagestats{display:flex;gap:18px;flex-wrap:wrap}.stagestats div{display:flex;flex-direction:column}.stagestats b{font-size:17px;font-variant-numeric:tabular-nums}.stagestats span{font-size:12px;color:var(--text-2)}
+.stagebar{height:10px;border-radius:999px;background:var(--surface-2);margin-top:14px;overflow:hidden}.stagebar i{display:block;height:100%;border-radius:inherit;background:var(--accent);transition:width 600ms var(--ease-out)}
+.strow{display:flex;align-items:center;gap:12px;padding:10px 4px;border-bottom:1px solid var(--border);cursor:pointer;border-radius:8px}.strow:last-child{border-bottom:0}
+@media (hover:hover) and (pointer:fine){.strow:hover{background:var(--hover)}}
+.stdate{width:38px;flex:none;text-align:center;display:flex;flex-direction:column;line-height:1.1}.stdate b{font-size:18px}.stdate span{font-size:11px;color:var(--text-2);text-transform:uppercase;letter-spacing:.04em}
+.stmain{flex:1;min-width:0}.stmain .t{display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;line-height:1.35}.stmain .m{font-size:12.5px;color:var(--text-2);margin-top:1px}
+.sthours{font-weight:700;font-variant-numeric:tabular-nums}
+.stcalc{margin-top:10px;background:var(--surface-2);border-radius:10px;padding:10px 12px;display:flex;align-items:baseline;gap:10px;color:var(--text-2);font-size:13px}.stcalc b{font-size:20px;color:var(--text);font-variant-numeric:tabular-nums}
+.sttaskadd{display:grid;grid-template-columns:1fr 138px 44px;gap:8px;margin:8px 0 6px}
+@media (max-width:560px){.sttaskadd{grid-template-columns:1fr 44px}.sttaskadd [name=d]{grid-column:1/-1;grid-row:2}}
+.stdone{margin-top:14px;display:flex;gap:14px;align-items:center;flex-wrap:wrap;background:var(--surface-2);border-radius:12px;padding:12px 14px}.stdone div{flex:1;min-width:200px;display:flex;flex-direction:column;gap:2px}.stdone span{font-size:13px;color:var(--text-2)}
+.stexp{display:grid;gap:8px}.stexp .btn{justify-content:flex-start;padding:12px 14px;display:flex;flex-direction:column;align-items:flex-start;height:auto}.stexp .btn span{font-weight:400;font-size:12px;opacity:.75}
 </style>
 </head>
 <body>
@@ -548,7 +562,7 @@ const DEFAULT_SETTINGS = () => ({
 const STATUSES = ["Te doen","Bezig","Wacht op iemand","Klaar"];
 const PRIOS = ["Hoog","Middel","Laag"];
 const METHODS = ["Bank","Cash","Payconiq"];
-const S = { settings:null, tasks:[], tx:[], kot:{items:[], statements:[], payments:[]}, others:{items:[]}, day:{items:[]}, ready:false };
+const S = { settings:null, tasks:[], tx:[], kot:{items:[], statements:[], payments:[]}, others:{items:[]}, day:{items:[]}, stage:null, ready:false };
 const UI = {
   view: "overzicht", taskView: "week", calMonth: monthKey(todayISO()),
   tf: {cat:"", client:"", status:"", showDone:false},
@@ -564,7 +578,7 @@ let COL = null, DL = null, loadTimer = null, firstServerSnap = false, FB = null,
 const writeQ = {};
 const CFG = window.LIFEOS_CONFIG || {};
 function lsGet(){ try { return JSON.parse(localStorage.getItem(LS_KEY) || "null"); } catch(e){ return null; } }
-function lsSet(){ try { localStorage.setItem(LS_KEY, JSON.stringify({settings:S.settings, tasks:S.tasks, tx:S.tx, kot:S.kot, others:S.others, day:S.day})); return true; } catch(e){ return false; } }
+function lsSet(){ try { localStorage.setItem(LS_KEY, JSON.stringify({settings:S.settings, tasks:S.tasks, tx:S.tx, kot:S.kot, others:S.others, day:S.day, stage:S.stage})); return true; } catch(e){ return false; } }
 const clean = o => JSON.parse(JSON.stringify(o));
 function docBody(name){
   if (name === "settings") return clean(S.settings);
@@ -572,6 +586,7 @@ function docBody(name){
   if (name === "kot") return clean(kotData());
   if (name === "others") return clean(othersData());
   if (name === "day") return clean(dayData());
+  if (name === "stage") return clean(stageData());
   if (name.startsWith("tx-")) { const m = name.slice(3); return clean({items: S.tx.filter(t => monthKey(t.date) === m)}); }
 }
 function persist(names){
@@ -635,13 +650,14 @@ async function initStore(){
       if (docs.kot && !busy("kot")) S.kot = clean(docs.kot);
       if (docs.others && !busy("others")) S.others = clean(docs.others);
       if (docs.day && !busy("day")) S.day = clean(docs.day);
+      if (docs.stage && !busy("stage")) S.stage = clean(docs.stage);
       const txDocs = Object.keys(docs).filter(k => k.startsWith("tx-"));
       const busyMonths = new Set(Object.keys(writeQ).filter(busy));
       const keep = S.tx.filter(t => busyMonths.has("tx-" + monthKey(t.date)));
       const fromServer = [];
       txDocs.forEach(k => { if (!busyMonths.has(k)) (docs[k].items || []).forEach(t => fromServer.push(clean(t))); });
       S.tx = keep.concat(fromServer);
-      if (S.settings) { S.ready = true; try { localStorage.setItem(LS_KEY, JSON.stringify({uid:user.uid, settings:S.settings, tasks:S.tasks, tx:S.tx, kot:S.kot, others:S.others, day:S.day})); } catch(e) {} }
+      if (S.settings) { S.ready = true; try { localStorage.setItem(LS_KEY, JSON.stringify({uid:user.uid, settings:S.settings, tasks:S.tasks, tx:S.tx, kot:S.kot, others:S.others, day:S.day, stage:S.stage})); } catch(e) {} }
       if (snap.docChanges().length || !snap.metadata.hasPendingWrites) render(); else renderStore();
     }, err => toast("Verbinding met je data mislukte: " + (err && err.code || "") + ". Herlaad de app."));
   });
@@ -718,10 +734,10 @@ function deleteTx(id){
 function replaceAll(data, names){
   const oldMonths = new Set(S.tx.map(t => "tx-" + monthKey(t.date)));
   S.settings = Object.assign(DEFAULT_SETTINGS(), data.settings || {});
-  S.tasks = data.tasks || []; S.tx = data.tx || []; S.kot = data.kot || {items:[], statements:[], payments:[]}; S.others = data.others || {items:[]}; S.day = data.day || {items:[]};
+  S.tasks = data.tasks || []; S.tx = data.tx || []; S.kot = data.kot || {items:[], statements:[], payments:[]}; S.others = data.others || {items:[]}; S.day = data.day || {items:[]}; S.stage = data.stage || null;
   S.tx.forEach(t => oldMonths.add("tx-" + monthKey(t.date)));
   S.ready = true;
-  persist(["settings","tasks","kot","others","day", ...oldMonths]); render();
+  persist(["settings","tasks","kot","others","day","stage", ...oldMonths]); render();
 }
 
 /* ============ demo data ============ */
@@ -795,9 +811,10 @@ const IC = {
   ms:'<svg viewBox="0 0 24 24" width="14" height="14" fill="currentColor"><path d="M12 2C6.36 2 2 6.13 2 11.7c0 2.91 1.2 5.42 3.14 7.16v3.39l3.06-1.68c.86.24 1.79.36 2.8.36 5.64 0 10-4.13 10-9.7S17.64 2 12 2zm1.02 12.97-2.55-2.72-4.97 2.72 5.47-5.8 2.6 2.71 4.92-2.71-5.47 5.8z"/></svg>',
   snap:'<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"><path d="M12 3c3 0 5 2.2 5 5.2v2.1l1.6-.5c.6-.2 1 .5.5.9l-1.8 1.1c.6 1.8 1.9 3 3.5 3.5-.4.9-1.6 1.2-2.6 1.3l-.4 1.3-1.8-.2c-1 .1-1.8 1.3-4 1.3s-3-1.2-4-1.3l-1.8.2-.4-1.3c-1-.1-2.2-.4-2.6-1.3 1.6-.5 2.9-1.7 3.5-3.5L4.9 10.7c-.5-.4-.1-1.1.5-.9l1.6.5V8.2C7 5.2 9 3 12 3z"/></svg>',
   copy:'<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="8" y="8" width="12" height="12" rx="2.5"/><path d="M16 8V6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h2"/></svg>',
+  stage:'<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="7" width="18" height="13" rx="2.5"/><path d="M9 7V5.5A1.5 1.5 0 0 1 10.5 4h3A1.5 1.5 0 0 1 15 5.5V7M3 12.5h18"/></svg>',
   check:'<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="3"><path d="m5 12 5 5L20 7"/></svg>'
 };
-const VIEWS = [["overzicht","Overzicht","home"],["taken","Taken","tasks"],["financien","Financiën","money"],["kot","Kot","kot"],["analyse","Analyse","chart"],["instellingen","Instellingen","gear"]];
+const VIEWS = [["overzicht","Overzicht","home"],["taken","Taken","tasks"],["financien","Financiën","money"],["kot","Kot","kot"],["stage","Stage","stage"],["analyse","Analyse","chart"],["instellingen","Instellingen","gear"]];
 
 /* ============ render root ============ */
 function render(){
@@ -819,8 +836,8 @@ function render(){
   }
   $("#fab").hidden = false;
   kotSet(); kotData();
-  $("#fab").hidden = UI.view === "snel";
-  const fn = {snel:vSnel, overzicht:vOverview, taken:vTasks, financien:vFinance, kot:vKot, analyse:vAnalyse, instellingen:vSettings}[UI.view] || vOverview;
+  $("#fab").hidden = UI.view === "snel" || UI.view === "stage";
+  const fn = {snel:vSnel, overzicht:vOverview, taken:vTasks, financien:vFinance, kot:vKot, stage:vStage, analyse:vAnalyse, instellingen:vSettings}[UI.view] || vOverview;
   const scroll = window.scrollY;
   main.innerHTML = fn();
   afterRender();
@@ -1793,6 +1810,243 @@ async function exportStatement(stId, fmt, part){
   openModal(`<h2><span>${esc(billTitle(d, part))}</span><button class="btn sm ghost" data-x>✕</button></h2><img src="${url}" alt="Rekening" style="width:100%;border:1px solid var(--border);border-radius:8px"><p class="small muted">Houd de afbeelding ingedrukt of klik met rechts om ze te bewaren of te delen.</p>`, sh => sh.querySelector("[data-x]").onclick = closeModal);
 }
 
+/* ============ stage: uren, logboek en stagetaken ============ */
+const STAGE_EMPTY = () => ({goal:130, student:"Ade Vansteenkiste", opleiding:"Master Sporttraining & Coaching – UGent", place:"Bonami Sportmedisch Centrum", mentor:"", entries:[], tasks:[], history:[]});
+function stageData(){
+  if (!S.stage || typeof S.stage !== "object") S.stage = STAGE_EMPTY();
+  const d = STAGE_EMPTY(); Object.keys(d).forEach(k => { if (S.stage[k] == null) S.stage[k] = d[k]; });
+  if (!Array.isArray(S.stage.entries)) S.stage.entries = []; if (!Array.isArray(S.stage.tasks)) S.stage.tasks = []; if (!Array.isArray(S.stage.history)) S.stage.history = [];
+  return S.stage;
+}
+const tmin = t => { const m = /^(\d{1,2}):(\d{2})/.exec(t || ""); return m ? (+m[1]) * 60 + (+m[2]) : null; };
+function stageMinutes(from, to, pause){ const a = tmin(from), b = tmin(to); if (a == null || b == null) return 0; let d = b - a; if (d <= 0) d += 1440; return Math.max(0, d - (+pause || 0)); }
+const hm = min => { min = Math.round(min || 0); const h = Math.floor(min / 60), m = min % 60; return h + "u" + String(m).padStart(2, "0"); };
+const hdec = min => (Math.round((min || 0) / 6) / 10).toString().replace(".", ",");
+const stageSorted = (st = stageData()) => [...st.entries].sort((a, b) => (a.date + a.from).localeCompare(b.date + b.from));
+const stageTotal = (st = stageData()) => st.entries.reduce((a, e) => a + (e.minutes || 0), 0);
+function weekStartISO(iso){ const d = new Date(iso + "T12:00:00"); const k = (d.getDay() + 6) % 7; d.setDate(d.getDate() - k); return d.toISOString().slice(0, 10); }
+
+function vStage(){
+  const st = stageData(), tot = stageTotal(), goal = (+st.goal || 130) * 60, pct = Math.min(100, Math.round(tot / goal * 100));
+  const left = Math.max(0, goal - tot), list = stageSorted();
+  const ws = weekStartISO(todayISO()), thisWeek = list.filter(e => e.date >= ws).reduce((a, e) => a + e.minutes, 0);
+  let pace = "";
+  if (list.length >= 2 && left > 0) {
+    const days = Math.max(7, (new Date(todayISO()) - new Date(list[0].date)) / 864e5 + 1), perDay = tot / days;
+    if (perDay > 0) { const end = new Date(); end.setDate(end.getDate() + Math.ceil(left / perDay)); pace = `Aan dit tempo (${hm(perDay * 7)} per week) ben je klaar rond ${fmtDate(end.toISOString().slice(0, 10))}.`; }
+  }
+  const months = {}; list.forEach(e => (months[e.date.slice(0, 7)] = months[e.date.slice(0, 7)] || []).push(e));
+  const open = st.tasks.filter(t => !t.done).sort((a, b) => (a.deadline || "9999").localeCompare(b.deadline || "9999")), done = st.tasks.filter(t => t.done);
+  return header("Stage", `${esc(st.place || "Stageplaats")} · doel ${st.goal || 130} uur`, `<button class="btn" data-st="export">${IC.copy.replace(/width="14" height="14"/, 'width="15" height="15"')}Logboek</button><button class="btn primary" data-st="add">+ Uren</button>`) +
+  `<div class="card stagehero">
+    <div class="row" style="align-items:flex-end;gap:14px;flex-wrap:wrap">
+      <div><div class="small muted">Gepresteerd</div><div class="stagebig">${hm(tot)}<span> / ${st.goal || 130}u</span></div></div>
+      <span class="spacer"></span>
+      <div class="stagestats"><div><b>${pct}%</b><span>klaar</span></div><div><b>${hm(left)}</b><span>nog te doen</span></div><div><b>${hm(thisWeek)}</b><span>deze week</span></div><div><b>${list.length}</b><span>${list.length === 1 ? "keer" : "keer"} geweest</span></div></div>
+    </div>
+    <div class="stagebar" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${pct}" aria-label="Voortgang stage-uren"><i style="width:${pct}%"></i></div>
+    ${tot >= Math.min(goal, 6000) && tot > 0 ? `<div class="stdone"><div><b>${tot >= goal ? `Je ${st.goal || 130} uur zijn rond.` : `Je hebt al ${hm(tot)}, nog ${hm(goal - tot)} tot ${st.goal || 130}u.`}</b><span>Klaar met deze stage? Rond ze af: alles gaat naar je stagegeschiedenis en deze pagina is weer leeg voor je volgende stage.</span></div><button class="btn primary" data-st="finish">Stage afronden</button></div>` : ""}
+    ${tot < goal && pace ? `<p class="small muted" style="margin:8px 0 0">${pace}</p>` : ""}
+  </div>
+  <div class="grid g2" style="margin-top:16px;align-items:start">
+    <div class="card"><div class="row" style="margin-bottom:6px"><h2 style="margin:0">Logboek</h2><span class="spacer"></span><button class="btn sm" data-st="add">+ Uren</button></div>
+      ${list.length ? Object.keys(months).sort().reverse().map(k => { const es = months[k].slice().reverse(), mt = es.reduce((a, e) => a + e.minutes, 0);
+        return `<div class="group-h" style="display:flex"><span>${MONTHS[+k.slice(5) - 1]} ${k.slice(0, 4)}</span><span class="spacer"></span><span>${hm(mt)}</span></div>` + es.map(e => `<div class="strow" data-st="edit" data-id="${e.id}" role="button" tabindex="0">
+          <div class="stdate"><b>${new Date(e.date + "T12:00:00").getDate()}</b><span>${DAYS[new Date(e.date + "T12:00:00").getDay()]}</span></div>
+          <div class="stmain"><div class="t">${e.what ? esc(e.what) : '<span class="muted">Geen omschrijving</span>'}</div><div class="m">${esc(e.from)} – ${esc(e.to)}${e.pause ? ` · ${e.pause} min pauze` : ""}</div></div>
+          <div class="sthours">${hm(e.minutes)}</div></div>`).join(""); }).join("")
+      : `<div class="empty-state" style="padding:18px 4px"><p style="margin:0 0 4px;font-weight:600">Nog geen uren ingevuld</p><p class="small muted" style="margin:0">Tik op <strong>+ Uren</strong>, vul in van wanneer tot wanneer je er was en wat je deed. De uren rekenen zichzelf uit.</p></div>`}
+    </div>
+    <div>
+      <div class="card"><div class="row" style="margin-bottom:6px"><h2 style="margin:0">Te doen voor stage</h2><span class="spacer"></span><span class="small muted">${open.length} open</span></div>
+        <form class="sttaskadd" data-stform autocomplete="off"><input class="inp" name="t" placeholder="bv. verslag testdag schrijven" aria-label="Nieuwe stagetaak"><input class="inp" type="date" name="d" aria-label="Deadline (optioneel)"><button class="btn primary" type="submit" aria-label="Toevoegen">+</button></form>
+        ${open.length ? `<div class="tlist">${open.map(stTaskRow).join("")}</div>` : '<div class="empty" style="padding:10px 0">Niets open. Mooi zo.</div>'}
+        ${done.length ? `<details class="tbl" style="margin-top:6px"><summary><span>Afgewerkt (${done.length})</span></summary><div class="tlist" style="margin-top:6px">${done.map(stTaskRow).join("")}</div></details>` : ""}
+      </div>
+      <details class="card tbl" style="margin-top:16px"><summary><span>Gegevens voor het logboek</span></summary>
+        <div class="formgrid" style="margin-top:12px">
+          <label class="f">Naam student<input class="inp" data-stset="student" value="${esc(st.student)}"></label>
+          <label class="f">Opleiding<input class="inp" data-stset="opleiding" value="${esc(st.opleiding)}"></label>
+          <label class="f">Stageplaats<input class="inp" data-stset="place" value="${esc(st.place)}"></label>
+          <label class="f">Stagementor<input class="inp" data-stset="mentor" value="${esc(st.mentor)}" placeholder="Naam stagementor"></label>
+          <label class="f">Doel (uren)<input class="inp" data-stset="goal" inputmode="numeric" value="${esc(String(st.goal || 130))}"></label>
+        </div>${list.length && tot < Math.min(goal, 6000) ? `<button class="btn sm ghost" data-st="finish" style="margin-top:10px">Stage nu al afronden</button>` : ""}</details>
+      ${st.history.length ? `<div class="card" style="margin-top:16px"><h2 style="margin:0 0 6px">Stagegeschiedenis</h2>${st.history.slice().reverse().map(h => { const l = stageSorted(h);
+        return `<div class="strow" data-st="hist" data-id="${h.id}" role="button" tabindex="0"><div class="stmain"><div class="t">${esc(h.place || "Stage")}</div><div class="m">${l.length ? fmtDate(l[0].date) + " – " + fmtDate(l[l.length - 1].date) : "—"} · ${l.length} keer${h.mentor ? " · " + esc(h.mentor) : ""}</div></div><div class="sthours">${hm(stageTotal(h))}</div></div>`; }).join("")}</div>` : ""}
+    </div>
+  </div>`;
+}
+function stTaskRow(t){
+  const di = t.deadline ? dueInfo({deadline: t.deadline, status: t.done ? "Klaar" : "Te doen"}) : null;
+  return `<div class="trow ${t.done ? "done" : ""}"><button class="chk ${t.done ? "on" : ""}" data-st="ttoggle" data-id="${t.id}" aria-label="${t.done ? "Markeer als niet klaar" : "Markeer als klaar"}">${t.done ? IC.check : ""}</button>
+    <div class="ttitle"><div class="t">${esc(t.title)}</div></div>${di ? `<span class="pill ${t.done ? "" : di.cls}">${esc(di.label)}</span>` : ""}<button class="btn sm ghost" data-st="tdel" data-id="${t.id}" aria-label="Verwijderen">✕</button></div>`;
+}
+function stageForm(existing){
+  const st = stageData(), last = stageSorted().slice(-1)[0];
+  const e = existing ? {...existing} : {id:uid(), date:todayISO(), from: last ? last.from : "09:00", to: last ? last.to : "17:00", pause: 0, what:""};
+  openModal(`<h2><span>${existing ? "Uren bewerken" : "Stage-uren toevoegen"}</span><button class="btn sm ghost" data-x aria-label="Sluiten">✕</button></h2>
+    <form autocomplete="off">
+      <label class="f">Datum<input class="inp" type="date" name="date" value="${e.date}" required></label>
+      <div class="formgrid" style="margin-top:12px;grid-template-columns:1fr 1fr 1fr">
+        <label class="f">Van<input class="inp" type="time" name="from" value="${esc(e.from)}" required></label>
+        <label class="f">Tot<input class="inp" type="time" name="to" value="${esc(e.to)}" required></label>
+        <label class="f">Pauze (min)<input class="inp" name="pause" inputmode="numeric" value="${e.pause || ""}" placeholder="0"></label>
+      </div>
+      <div class="stcalc" data-calc></div>
+      <label class="f" style="margin-top:12px">Wat heb je gedaan?<textarea class="inp" name="what" rows="4" placeholder="bv. inspanningstesten op de fiets meegevolgd, 2 bikefits geobserveerd">${esc(e.what || "")}</textarea></label>
+      <div class="small" data-err style="color:var(--warn-text);min-height:18px;margin-top:6px"></div>
+      <div class="row">${existing ? '<button type="button" class="btn danger" data-del>Verwijderen</button>' : ""}<span class="spacer"></span><button type="submit" class="btn primary">Opslaan</button></div>
+    </form>`, sh => {
+    const form = sh.querySelector("form"), calc = sh.querySelector("[data-calc]");
+    const upd = () => { const m = stageMinutes(form.from.value, form.to.value, parseInt(form.pause.value, 10) || 0), over = tmin(form.to.value) != null && tmin(form.from.value) != null && tmin(form.to.value) <= tmin(form.from.value);
+      calc.innerHTML = m > 0 ? `<b>${hm(m)}</b><span>${hdec(m)} uur${over ? " · tot na middernacht" : ""}</span>` : `<span>Vul van en tot in</span>`; };
+    ["from", "to", "pause"].forEach(n => form[n].addEventListener("input", upd)); upd();
+    sh.querySelector("[data-x]").onclick = () => closeModal();
+    const del = sh.querySelector("[data-del]"); if (del) del.onclick = () => { const old = st.entries.find(x => x.id === e.id); st.entries = st.entries.filter(x => x.id !== e.id); persist(["stage"]); closeModal(); render(); toast("Uren verwijderd", () => { st.entries.push(old); persist(["stage"]); render(); }); };
+    form.onsubmit = ev => { ev.preventDefault();
+      const pause = Math.max(0, parseInt(form.pause.value, 10) || 0), minutes = stageMinutes(form.from.value, form.to.value, pause), err = sh.querySelector("[data-err]");
+      if (!form.date.value) { err.textContent = "Kies een datum."; return; }
+      if (!(minutes > 0)) { err.textContent = "Controleer je uren: van, tot en pauze."; return; }
+      const rec = {...e, date: form.date.value, from: form.from.value, to: form.to.value, pause, minutes, what: form.what.value.trim()};
+      const i = st.entries.findIndex(x => x.id === e.id); if (i >= 0) st.entries[i] = rec; else st.entries.push(rec);
+      persist(["stage"]); closeModal(); render();
+      toast(`${hm(minutes)} stage op ${fmtDate(rec.date)} · totaal ${hm(stageTotal())}`, existing ? null : () => { st.entries = st.entries.filter(x => x.id !== rec.id); persist(["stage"]); render(); });
+    };
+    if (!existing) setTimeout(() => form.what.focus(), 40);
+  });
+}
+
+/* stage afronden en geschiedenis */
+function stageFinish(){
+  const st = stageData(), tot = stageTotal(), list = stageSorted();
+  openModal(`<h2><span>Stage afronden</span><button class="btn sm ghost" data-x aria-label="Sluiten">✕</button></h2>
+    <p style="margin-top:0"><strong>${esc(st.place || "Stage")}</strong> · ${hm(tot)} van ${st.goal || 130}u · ${list.length} keer${list.length ? ` · ${fmtDate(list[0].date)} – ${fmtDate(list[list.length - 1].date)}` : ""}</p>
+    <p class="small muted">Je uren, je logboek en je stagetaken gaan naar je <strong>stagegeschiedenis</strong>. Daar kan je ze altijd terugbekijken en het logboek opnieuw exporteren. De stagepagina wordt daarna leeg voor je volgende stage.</p>
+    <label class="f" style="margin-top:8px">Volgende stageplaats (optioneel)<input class="inp" name="np" placeholder="kan je ook later invullen"></label>
+    <div class="row" style="margin-top:16px"><button class="btn" data-ex2>Eerst logboek exporteren</button><span class="spacer"></span><button class="btn primary" data-go>Afronden</button></div>`, sh => {
+    sh.querySelector("[data-x]").onclick = () => closeModal();
+    sh.querySelector("[data-ex2]").onclick = () => { closeModal(); stageExport(); };
+    sh.querySelector("[data-go]").onclick = () => {
+      const snap = JSON.parse(JSON.stringify({id: uid(), student: st.student, opleiding: st.opleiding, place: st.place, mentor: st.mentor, goal: st.goal, entries: st.entries, tasks: st.tasks, finishedAt: todayISO()}));
+      const before = JSON.parse(JSON.stringify(st));
+      st.history.push(snap); st.entries = []; st.tasks = []; st.mentor = ""; st.place = sh.querySelector("[name=np]").value.trim();
+      persist(["stage"]); closeModal(); render();
+      toast(`Stage afgerond · ${hm(stageTotal(snap))} bewaard in je geschiedenis`, () => { S.stage = before; persist(["stage"]); render(); });
+    };
+  });
+}
+function stageHistory(id){
+  const st = stageData(), h = st.history.find(x => x.id === id); if (!h) return;
+  const list = stageSorted(h);
+  openModal(`<h2><span>${esc(h.place || "Stage")}</span><button class="btn sm ghost" data-x aria-label="Sluiten">✕</button></h2>
+    <p class="small muted" style="margin-top:0">${hm(stageTotal(h))} van ${h.goal || 130}u · ${list.length} keer${h.mentor ? " · mentor " + esc(h.mentor) : ""} · afgerond op ${fmtDate(h.finishedAt)}</p>
+    <div style="max-height:46vh;overflow:auto;margin:0 -4px">${list.slice().reverse().map(e => `<div class="strow" style="cursor:default"><div class="stdate"><b>${new Date(e.date + "T12:00:00").getDate()}</b><span>${MONTHS[+e.date.slice(5, 7) - 1].slice(0, 3)}</span></div><div class="stmain"><div class="t">${e.what ? esc(e.what) : '<span class="muted">Geen omschrijving</span>'}</div><div class="m">${esc(e.from)} – ${esc(e.to)}</div></div><div class="sthours">${hm(e.minutes)}</div></div>`).join("") || '<div class="empty">Geen uren.</div>'}</div>
+    ${h.tasks && h.tasks.length ? `<p class="small muted" style="margin:12px 0 0">Stagetaken: ${h.tasks.filter(t => t.done).length} van ${h.tasks.length} afgewerkt</p>` : ""}
+    <div class="row" style="margin-top:16px"><button class="btn danger" data-del>Verwijderen</button><span class="spacer"></span><button class="btn primary" data-exh>Logboek exporteren</button></div>`, sh => {
+    sh.querySelector("[data-x]").onclick = () => closeModal();
+    sh.querySelector("[data-exh]").onclick = () => { closeModal(); stageExport(h.id); };
+    sh.querySelector("[data-del]").onclick = () => { st.history = st.history.filter(x => x.id !== h.id); persist(["stage"]); closeModal(); render(); toast("Stage uit geschiedenis verwijderd", () => { st.history.push(h); persist(["stage"]); render(); }); };
+  });
+}
+
+/* logboek */
+function stageLogText(st = stageData()){
+  const list = stageSorted(st); let cum = 0;
+  const L = [`STAGELOGBOEK`, `${st.student} · ${st.opleiding}`, `Stageplaats: ${st.place}${st.mentor ? " · mentor: " + st.mentor : ""}`, ""];
+  list.forEach(e => { cum += e.minutes; L.push(`${fmtDate(e.date)}  ${e.from}–${e.to}${e.pause ? ` (−${e.pause} min)` : ""}  ${hm(e.minutes)}  (totaal ${hm(cum)})`); if (e.what) L.push(`   ${e.what}`); });
+  L.push("", `Totaal: ${hm(cum)} van ${st.goal || 130}u (${Math.round(cum / ((+st.goal || 130) * 60) * 100)}%)`);
+  return L.join("\n");
+}
+function stageCSV(st = stageData()){
+  const list = stageSorted(st); let cum = 0; const q = v => `"${String(v).replace(/"/g, '""')}"`;
+  return ["Datum;Van;Tot;Pauze (min);Uren;Uren (decimaal);Cumulatief;Activiteiten"].concat(list.map(e => { cum += e.minutes; return [fmtDate(e.date), e.from, e.to, e.pause || 0, hm(e.minutes), hdec(e.minutes), hm(cum), q(e.what || "")].join(";"); })).join("\n");
+}
+function stagePDF(st = stageData()){
+  const list = stageSorted(st), { jsPDF } = window.jspdf, doc = new jsPDF({unit:"mm", format:"a4"});
+  const L = 18, R = 192, goal = (+st.goal || 130) * 60; let y = 22, cum = 0, page = 1;
+  const ink = () => doc.setTextColor(40, 39, 36), mute = () => doc.setTextColor(120, 118, 112);
+  const cols = [{k:"Datum", x:L, w:22}, {k:"Van – tot", x:L + 22, w:24}, {k:"Uren", x:L + 46, w:15, r:true}, {k:"Totaal", x:L + 61, w:17, r:true}, {k:"Wat heb ik gedaan", x:L + 82, w:R - (L + 82)}];
+  const head = () => { doc.setFillColor(244, 244, 242); doc.rect(L, y - 5, R - L, 8, "F"); doc.setFont("helvetica", "bold"); doc.setFontSize(9); ink();
+    cols.forEach(c => doc.text(c.k, c.r ? c.x + c.w - 1 : c.x + 1, y, c.r ? {align:"right"} : undefined)); y += 6; };
+  const foot = () => { doc.setFont("helvetica", "normal"); doc.setFontSize(8); mute(); doc.text(`${st.student} · stagelogboek`, L, 290); doc.text("Pagina " + page, R, 290, {align:"right"}); };
+  // kop
+  doc.setFont("helvetica", "bold"); doc.setFontSize(20); ink(); doc.text("Stagelogboek", L, y); y += 8;
+  doc.setFont("helvetica", "normal"); doc.setFontSize(10); mute();
+  const meta = [["Student", st.student], ["Opleiding", st.opleiding], ["Stageplaats", st.place], ["Stagementor", st.mentor || "—"], ["Periode", list.length ? `${fmtDate(list[0].date)} – ${fmtDate(list[list.length - 1].date)}` : "—"]];
+  meta.forEach(([k, v]) => { mute(); doc.text(k, L, y); ink(); doc.text(String(v || "—"), L + 30, y); y += 5.5; });
+  y += 3; const tot = list.reduce((a, e) => a + e.minutes, 0);
+  doc.setFillColor(47, 46, 43); doc.roundedRect(L, y, R - L, 16, 2, 2, "F"); doc.setTextColor(255, 255, 255);
+  doc.setFont("helvetica", "bold"); doc.setFontSize(14); doc.text(`${hm(tot)} van ${st.goal || 130}u`, L + 5, y + 10.5);
+  doc.setFont("helvetica", "normal"); doc.setFontSize(10); doc.text(`${Math.min(100, Math.round(tot / goal * 100))}% · ${list.length} stagemomenten · nog ${hm(Math.max(0, goal - tot))}`, R - 5, y + 10.5, {align:"right"});
+  y += 26; head();
+  doc.setFontSize(9.5);
+  list.forEach((e, i) => {
+    cum += e.minutes;
+    const lines = doc.splitTextToSize(e.what || "—", cols[4].w - 2), h = Math.max(7, lines.length * 4.3 + 2.8);
+    if (y + h > 272) { foot(); doc.addPage(); page++; y = 20; head(); doc.setFontSize(9.5); }
+    if (i % 2) { doc.setFillColor(250, 250, 249); doc.rect(L, y - 4.3, R - L, h, "F"); }
+    doc.setFont("helvetica", "normal"); ink();
+    doc.text(fmtDate(e.date), L + 1, y); doc.text(`${e.from} – ${e.to}`, cols[1].x + 1, y);
+    if (e.pause) { doc.setFontSize(7.5); mute(); doc.text(`- ${e.pause} min pauze`, cols[1].x + 1, y + 3.8); doc.setFontSize(9.5); ink(); }
+    doc.setFont("helvetica", "bold"); doc.text(hm(e.minutes), cols[2].x + cols[2].w - 1, y, {align:"right"});
+    doc.setFont("helvetica", "normal"); mute(); doc.text(hm(cum), cols[3].x + cols[3].w - 1, y, {align:"right"}); ink();
+    doc.text(lines, cols[4].x + 1, y);
+    y += h; doc.setDrawColor(230); doc.line(L, y - 4.3, R, y - 4.3);
+  });
+  if (y + 40 > 280) { foot(); doc.addPage(); page++; y = 24; }
+  y += 2; doc.setDrawColor(47); doc.setLineWidth(0.5); doc.line(L, y - 4, R, y - 4); doc.setLineWidth(0.2);
+  doc.setFont("helvetica", "bold"); doc.setFontSize(11); ink(); doc.text("Totaal gepresteerde uren", L + 1, y + 1.5); doc.text(`${hm(tot)}  (${hdec(tot)} u)`, R - 1, y + 1.5, {align:"right"});
+  y += 20; doc.setFont("helvetica", "normal"); doc.setFontSize(9); mute();
+  [["Handtekening student", L], ["Handtekening stagementor", L + 95]].forEach(([t, x]) => { doc.text(t, x, y); doc.setDrawColor(180); doc.line(x, y + 14, x + 75, y + 14); doc.text("Datum:", x, y + 20); });
+  foot();
+  return doc.output("blob");
+}
+function stageExport(hid){
+  const src = hid ? stageData().history.find(h => h.id === hid) : stageData(); if (!src) return;
+  const n = src.entries.length;
+  openModal(`<h2><span>Logboek exporteren</span><button class="btn sm ghost" data-x aria-label="Sluiten">✕</button></h2>
+    <p class="small muted" style="margin-top:0">${hid ? esc(src.place || "Stage") + " · " : ""}${n} stagemomenten · ${hm(stageTotal(src))} in totaal. Het logboek bevat per keer de datum, van–tot, de uren, het lopende totaal en wat je deed, met onderaan het totaal en plaats voor handtekeningen.</p>
+    <div class="stexp">
+      <button class="btn primary" data-ex="pdf">PDF<span>klaar om in te dienen</span></button>
+      <button class="btn" data-ex="csv">Excel (CSV)<span>om zelf verder te bewerken</span></button>
+      <button class="btn" data-ex="txt">Tekst kopiëren<span>voor een mail of document</span></button>
+    </div>`, sh => {
+    sh.querySelector("[data-x]").onclick = () => closeModal();
+    sh.querySelectorAll("[data-ex]").forEach(b => b.onclick = async () => {
+      const f = b.dataset.ex, base = "Stagelogboek-" + (src.place || src.student || "stage").replace(/[^\wÀ-ÿ]+/g, "-") + "-" + (hid ? (src.finishedAt || todayISO()) : todayISO());
+      if (!n) { toast("Vul eerst een paar uren in."); return; }
+      if (f === "pdf") { if (!window.jspdf) { toast("PDF-module niet geladen. Probeer Excel of Tekst."); return; } closeModal(); return saveFile(base + ".pdf", stagePDF(src)); }
+      if (f === "csv") { closeModal(); return saveFile(base + ".csv", "\ufeff" + stageCSV(src)); }
+      const txt = stageLogText(src); try { await navigator.clipboard.writeText(txt); closeModal(); toast("Logboek gekopieerd"); } catch(e) { closeModal(); showCopy(base + ".txt", txt); }
+    });
+  });
+}
+
+/* klikken en invoer op de stagepagina */
+document.addEventListener("click", e => {
+  const el = e.target.closest("[data-st]"); if (!el) return;
+  const a = el.dataset.st, st = stageData();
+  if (a === "add") return stageForm();
+  if (a === "edit") return stageForm(st.entries.find(x => x.id === el.dataset.id));
+  if (a === "export") return stageExport();
+  if (a === "finish") return stageFinish();
+  if (a === "hist") return stageHistory(el.dataset.id);
+  if (a === "ttoggle") { const t = st.tasks.find(x => x.id === el.dataset.id); if (!t) return; t.done = !t.done; persist(["stage"]); render(); return; }
+  if (a === "tdel") { const t = st.tasks.find(x => x.id === el.dataset.id); st.tasks = st.tasks.filter(x => x.id !== el.dataset.id); persist(["stage"]); render(); toast("Taak verwijderd", () => { st.tasks.push(t); persist(["stage"]); render(); }); }
+});
+document.addEventListener("keydown", e => { if ((e.key === "Enter" || e.key === " ") && e.target.matches && e.target.matches('.strow[data-st]')) { e.preventDefault(); e.target.click(); } });
+document.addEventListener("submit", e => {
+  const f = e.target.closest("[data-stform]"); if (!f) return; e.preventDefault();
+  const title = f.t.value.trim(); if (!title) return f.t.focus();
+  stageData().tasks.push({id:uid(), title: title.charAt(0).toUpperCase() + title.slice(1), deadline: f.d.value || "", done:false});
+  persist(["stage"]); render(); setTimeout(() => { const i = document.querySelector("[data-stform] [name=t]"); if (i) i.focus(); }, 30);
+});
+document.addEventListener("change", e => {
+  const el = e.target.closest("[data-stset]"); if (!el) return;
+  const st = stageData(), k = el.dataset.stset; st[k] = k === "goal" ? Math.max(1, parseInt(el.value, 10) || 130) : el.value.trim();
+  persist(["stage"]); toast("Opgeslagen"); if (k === "goal" || k === "place") render();
+});
+
 /* ---------- events ---------- */
 document.addEventListener("click", async e => {
   const el = e.target.closest("[data-k]"); if (!el) return;
@@ -2542,7 +2796,7 @@ document.addEventListener("click", e => {
       case "start-empty": return replaceAll({settings:DEFAULT_SETTINGS(), tasks:[], tx:[]});
       case "load-demo": { const dd = demoData(), kd = kotDemo(), K = kotData(); S.tasks.push(...dd.tasks); S.tx.push(...dd.tx); const base = K.statements.reduce((m, s) => Math.max(m, s.nr), 0); kd.statements.forEach(s => s.nr += base); K.items.push(...kd.items); K.statements.push(...kd.statements); K.payments.push(...kd.payments); persist(["tasks","kot", ...txNamesFor(...dd.tx.map(t => t.date))]); render(); return toast("Voorbeelddata geladen"); }
       case "wipe-demo": return confirmBox("Alle voorbeelddata wissen? Je eigen invoer blijft staan.", "Wissen", () => { const months = txNamesFor(...S.tx.filter(t => t.demo).map(t => t.date)); S.tasks = S.tasks.filter(t => !t.demo); S.tx = S.tx.filter(t => !t.demo); const K = kotData(); const demoSt = new Set(K.statements.filter(s => s.demo).map(s => s.id)); K.items = K.items.filter(i => !i.demo); K.items.forEach(i => { if (demoSt.has(i.statementId)) i.statementId = ""; }); K.statements = K.statements.filter(s => !s.demo); K.payments = K.payments.filter(p => !p.demo); UI.kotReview = null; persist(["tasks","kot", ...months]); render(); toast("Voorbeelddata gewist"); });
-      case "backup": return saveFile("LifeOS-backup-" + todayISO() + ".json", JSON.stringify({app:"lifeos", version:1, exported:new Date().toISOString(), settings:S.settings, tasks:S.tasks, tx:S.tx, kot:S.kot, others:S.others, day:S.day}, null, 2));
+      case "backup": return saveFile("LifeOS-backup-" + todayISO() + ".json", JSON.stringify({app:"lifeos", version:1, exported:new Date().toISOString(), settings:S.settings, tasks:S.tasks, tx:S.tx, kot:S.kot, others:S.others, day:S.day, stage:S.stage}, null, 2));
       case "notion": return exportNotion();
       case "csv-copy": return csvCopyPicker();
     }
