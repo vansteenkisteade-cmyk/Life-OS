@@ -10,14 +10,14 @@
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-title" content="Life OS">
 <meta name="apple-mobile-web-app-status-bar-style" content="default">
-<link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+<link rel="apple-touch-icon" href="logo-180.png">
 <title>Life OS</title>
 <link rel="icon" href="data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCA1MTIgNTEyIiB3aWR0aD0iNTEyIiBoZWlnaHQ9IjUxMiI+PHJlY3Qgd2lkdGg9IjUxMiIgaGVpZ2h0PSI1MTIiIGZpbGw9IiNmZmZmZmYiLz48cmVjdCB4PSIxMTYuMyIgeT0iODguOCIgd2lkdGg9IjEwMS4yIiBoZWlnaHQ9IjEwMS4yIiByeD0iMjguNiIgZmlsbD0iIzJmNGE3YSIvPjxyZWN0IHg9IjExNi4zIiB5PSIyMDUuNCIgd2lkdGg9IjEwMS4yIiBoZWlnaHQ9IjEwMS4yIiByeD0iMjguNiIgZmlsbD0iIzBlN2M3NCIvPjxyZWN0IHg9IjExNi4zIiB5PSIzMjIuMCIgd2lkdGg9IjEwMS4yIiBoZWlnaHQ9IjEwMS4yIiByeD0iMjguNiIgZmlsbD0iI2UwNjYxYiIvPjxyZWN0IHg9IjIzMi45IiB5PSIzMjIuMCIgd2lkdGg9IjEwMS4yIiBoZWlnaHQ9IjEwMS4yIiByeD0iMjguNiIgZmlsbD0iIzFmN2E0MyIvPjxjaXJjbGUgY3g9IjM3Mi42IiBjeT0iNDAwLjEiIHI9IjIzLjEiIGZpbGw9IiNkNjMzNmMiLz48L3N2Zz4=">
 <script>(function(){try{var t=localStorage.getItem("lifeos-theme");if(t==="light"||t==="dark")document.documentElement.setAttribute("data-theme",t);}catch(e){}})();</script>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Space+Grotesk:wght@500;600;700&display=swap" rel="stylesheet">
 <meta name="description" content="Life OS: taken, deadlines, financiën en kot-afrekeningen op één plek.">
-<link rel="icon" href="icons/icon-192.png">
+<link rel="icon" href="logo-192.png">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
@@ -2891,7 +2891,7 @@ async function disablePush(){
 async function testPush(){
   try {
     const reg = await navigator.serviceWorker.ready;
-    await reg.showNotification("Life OS", {body:"Testmelding: meldingen werken op dit toestel.", icon:"icons/icon-192.png", badge:"icons/icon-192.png", tag:"lifeos-test"});
+    await reg.showNotification("Life OS", {body:"Testmelding: meldingen werken op dit toestel.", icon:"logo-192.png", badge:"logo-192.png", tag:"lifeos-test"});
     if (CUR_USER) await firebase.firestore().collection("users").doc(CUR_USER.uid).collection("meta").doc("testpush").set({requested: new Date().toISOString()});
     toast("Testmelding verstuurd. Binnen ±10 minuten volgt er ook één via de server.");
   } catch(e) { toast("Testmelding mislukte: " + (e && e.message || "")); }
