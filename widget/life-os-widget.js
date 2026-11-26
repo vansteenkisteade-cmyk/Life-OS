@@ -6,15 +6,16 @@
 const APP_URL = "https://vansteenkisteade-cmyk.github.io/Life-OS/";
 const KC = "lifeos.";              // sleutelhanger-prefix
 const TYPES = {
-  kot:       {label: "Kot",        symbol: "cart.fill",              color: "#2a78d6"},
-  uitgave:   {label: "Uitgave",    symbol: "creditcard.fill",        color: "#d95926"},
-  inkomst:   {label: "Inkomst",    symbol: "eurosign.circle.fill",   color: "#0ca30c"},
-  lijstje:   {label: "Lijstje",    symbol: "checklist",              color: "#6250d6"},
-  taak:      {label: "Taak",       symbol: "checkmark.circle.fill",  color: "#2f2e2b"},
-  voorschot: {label: "Voorschot",  symbol: "person.2.fill",          color: "#c98500"},
-  stage:     {label: "Stage",      symbol: "briefcase.fill",         color: "#0e9384"},
-  stagetaken:{label: "Stage",      symbol: "briefcase.fill",         color: "#0e9384"},
-  overzicht: {label: "Life OS",    symbol: "square.grid.2x2.fill",   color: "#2f2e2b"}
+  kot:       {label: "Kot",        symbol: "house.fill",              color: "#e0661b"},
+  uitgave:   {label: "Uitgave",    symbol: "cart.fill",        color: "#1f7a43"},
+  inkomst:   {label: "Inkomst",    symbol: "eurosign",   color: "#1f7a43"},
+  lijstje:   {label: "Lijstje",    symbol: "checklist",              color: "#d6336c"},
+  taak:      {label: "Taak",       symbol: "checkmark.circle.fill",  color: "#2f4a7a"},
+  voorschot: {label: "Voorschot",  symbol: "person.2.fill",          color: "#b98200"},
+  stage:     {label: "Stage",      symbol: "briefcase.fill",         color: "#0e7c74"},
+  stagetaken:{label: "Stage",      symbol: "briefcase.fill",         color: "#0e7c74"},
+  overzicht: {label: "Life OS",    symbol: "square.grid.2x2.fill",   color: "#1c1b19"},
+  rustig:    {label: "Life OS",    symbol: "square.grid.2x2.fill",   color: "#1c1b19"}
 };
 
 /* ---------------- hulpfuncties ---------------- */
@@ -165,179 +166,182 @@ function stageStats(st) {
 }
 const dueLabel = d => { const t = today(); if (d === t) return "vandaag"; if (d === addDays(t, 1)) return "morgen"; return d.slice(8, 10) + "/" + d.slice(5, 7); };
 
-/* ---------------- widget tekenen ---------------- */
-/* thema: zet in de widget-parameter "licht" of "donker" achter het type, bv. "kot donker" */
+/* ---------------- widget tekenen (2.0-design) ---------------- */
 const WPARAM = String((typeof args !== "undefined" && args.widgetParameter) || "").trim().toLowerCase();
 const THEME = /\b(donker|dark|zwart)\b/.test(WPARAM) ? "dark" : /\b(licht|light|wit)\b/.test(WPARAM) ? "light" : "auto";
 const dyn = (l, d) => THEME === "light" ? l : THEME === "dark" ? d : Color.dynamic(l, d);
-const C = {bg: dyn(new Color("#ffffff"), new Color("#1c1c1e")), text: dyn(new Color("#2f2e2b"), new Color("#ecebe7")), muted: dyn(new Color("#6b6a66"), new Color("#a5a49e"))};
-const tint = type => { const c = (TYPES[type] || TYPES.overzicht).color; return c === "#2f2e2b" ? C.text : new Color(c); };
+const DARKP = {"#e0661b":"#f08a4b", "#1f7a43":"#4cc27a", "#d6336c":"#f06595", "#2f4a7a":"#86a8e8", "#b98200":"#e0b23a", "#0e7c74":"#3cc7b9", "#1c1b19":"#ecebe7"};
+const hexMix = (a, b, t) => { const p = h => [1, 3, 5].map(i => parseInt(h.slice(i, i + 2), 16)); const A = p(a), B = p(b); return "#" + A.map((v, i) => Math.round(v * t + B[i] * (1 - t)).toString(16).padStart(2, "0")).join(""); };
+const C = {bg: dyn(new Color("#ffffff"), new Color("#141413")), text: dyn(new Color("#1c1b19"), new Color("#ecebe7")), muted: dyn(new Color("#6b6a66"), new Color("#a5a49e")), line: dyn(new Color("#ece9e2"), new Color("#ffffff", 0.12)), white: new Color("#ffffff")};
+const hexOf = type => (TYPES[type] || TYPES.overzicht).color;
+const tint = type => { const h = hexOf(type); return dyn(new Color(h), new Color(DARKP[h] || h)); };
+const soft = (type, a) => { const h = hexOf(type); return dyn(new Color(h, a), new Color(DARKP[h] || h, a + 0.04)); };
+// kaartachtergrond: een vleugje categoriekleur, zoals de omrande kaarten in de app
+const wash = (type, a = 0.07) => { const h = hexOf(type); return dyn(new Color(hexMix(h, "#ffffff", a)), new Color(hexMix(DARKP[h] || h, "#141413", a + 0.05))); };
+const onTint = type => hexOf(type) === "#1c1b19" ? C.bg : dyn(C.white, new Color("#141413"));   // tekst op een volle kleurknop
+const RED = dyn(new Color("#c92a2a"), new Color("#ff6b6b"));
+const SURF = dyn(new Color("#f6f4ef"), new Color("#22221f"));
 const runUrl = type => `scriptable:///run/${encodeURIComponent(Script.name())}?type=${type}`;
+function sym(st, name, size, color) { const i = st.addImage(SFSymbol.named(name).image); i.imageSize = new Size(size, size); i.tintColor = color; return i; }
+function txt(st, s, size, color, weight) {
+  const t = st.addText(s);
+  t.font = weight === 8 ? Font.heavySystemFont(size) : weight === 7 ? Font.boldSystemFont(size) : weight === 6 ? Font.semiboldSystemFont(size) : weight === 5 ? Font.mediumSystemFont(size) : Font.systemFont(size);
+  t.textColor = color || C.text; t.lineLimit = 1; t.minimumScaleFactor = 0.7; return t;
+}
+// het nieuwe logo: een L uit vier categorieblokjes + roze punt
+function logoImage(px) {
+  const dc = new DrawContext(); dc.size = new Size(px, px); dc.opaque = false; dc.respectScreenScale = true;
+  const u = px / 24, cell = (x, y, c) => { const p = new Path(); p.addRoundedRect(new Rect(x * u, y * u, 6 * u, 6 * u), 1.8 * u, 1.8 * u); dc.addPath(p); dc.setFillColor(new Color(c)); dc.fillPath(); };
+  cell(3, 2, "#2f4a7a"); cell(3, 9, "#0e7c74"); cell(3, 16, "#e0661b"); cell(10, 16, "#1f7a43");
+  dc.setFillColor(new Color("#d6336c")); dc.fillEllipse(new Rect(17.9 * u, 18.4 * u, 3.2 * u, 3.2 * u));
+  return dc.getImage();
+}
+function brand(st, size = 18) { const i = st.addImage(logoImage(size)); i.imageSize = new Size(size, size); return i; }
 function header(w, type, size) {
   const T = TYPES[type] || TYPES.overzicht;
   const st = w.addStack(); st.centerAlignContent();
-  const img = st.addImage(SFSymbol.named(T.symbol).image); img.imageSize = new Size(size, size); img.tintColor = tint(type);
-  st.addSpacer(6);
-  const tx = st.addText(T.label); tx.font = Font.boldSystemFont(size * 0.8); tx.textColor = C.text;
+  if (type === "overzicht") brand(st, size); else iconTile(st, type, size + 6);
+  st.addSpacer(7); txt(st, T.label, size * 0.75, type === "overzicht" ? C.text : tint(type), 7);
 }
-function line(w, text, size = 12, color = C.muted, bold = false) { const t = w.addText(text); t.font = bold ? Font.boldSystemFont(size) : Font.systemFont(size); t.textColor = color; t.lineLimit = 1; t.minimumScaleFactor = 0.7; return t; }
+function line(w, text, size = 12, color = C.muted, bold = false) { return txt(w, text, size, color, bold ? 7 : 4); }
+// vol gekleurd icoontegeltje met wit symbool (zoals in de app)
+function iconTile(st, type, s = 26, symbol) {
+  const ic = st.addStack(); ic.size = new Size(s, s); ic.cornerRadius = Math.round(s * 0.32); ic.backgroundColor = tint(type); ic.centerAlignContent();
+  sym(ic, symbol || TYPES[type].symbol, Math.round(s * 0.5), onTint(type)); return ic;
+}
+function cap(st, title, color) { return txt(st, title, 10, color, 7); }
+// volle kleurknop, net als de primaire knoppen in de app
+function pillButton(w, type, label, url, opts = {}) {
+  const b = w.addStack(); b.url = url || runUrl(type); b.backgroundColor = tint(type); b.cornerRadius = opts.r || 12;
+  b.setPadding(opts.py || 7, 8, opts.py || 7, 8); b.centerAlignContent();
+  b.addSpacer(); sym(b, "plus", opts.fs ? opts.fs - 1 : 10, onTint(type)); b.addSpacer(4); txt(b, label, opts.fs || 12, onTint(type), 7); b.addSpacer();
+  return b;
+}
 async function buildWidget(type) {
   const w = new ListWidget(); w.backgroundColor = C.bg; w.setPadding(14, 14, 14, 14);
-  w.url = type === "overzicht" ? APP_URL + "#snel" : `scriptable:///run/${encodeURIComponent(Script.name())}?type=${type}`;
+  w.url = (type === "overzicht" || type === "rustig") ? APP_URL : runUrl(type);
   w.refreshAfterDate = new Date(Date.now() + 15 * 60 * 1000);
   if (!kcGet("refresh")) { header(w, type, 18); w.addSpacer(); line(w, "Tik om te koppelen", 12, C.muted); w.url = `scriptable:///run/${encodeURIComponent(Script.name())}`; return w; }
   let S = null; try { S = stats(await loadAll()); } catch (e) { S = null; }
   const fam = config.widgetFamily || "small";
   if (type === "stage") { stageWidget(w, S, fam); return w; }
   if (type === "stagetaken") { stageTasksWidget(w, S, fam); return w; }
+  if (type === "rustig") { calmWidget(w, S, fam); return w; }
   if (type === "overzicht" || fam === "medium" || fam === "large") { await bigWidget(w, S, fam); return w; }
   smallWidget(w, type, S);
   return w;
 }
 
-
-
-/* kleine widget: één soort, één cijfer, één knop */
+/* kleine widget: één categorie, één cijfer, één knop, in de kleur van die categorie */
 function smallWidget(w, type, S) {
-  w.setPadding(14, 14, 12, 14);
+  w.setPadding(14, 14, 12, 14); w.backgroundColor = wash(type);
   const top = w.addStack(); top.centerAlignContent();
-  const ic = top.addStack(); ic.size = new Size(26, 26); ic.cornerRadius = 8; ic.backgroundColor = soft(type, 0.18); ic.centerAlignContent();
-  sym(ic, TYPES[type].symbol, 13, tint(type));
-  top.addSpacer(7); txt(top, TYPES[type].label, 13, C.text, 7);
+  iconTile(top, type, 28); top.addSpacer(8); txt(top, TYPES[type].label, 13, tint(type), 7);
   w.addSpacer();
   if (!S) { txt(w, "Geen verbinding", 12, C.muted); }
   else if (type === "lijstje") {
-    if (S.list.length) { S.list.slice(0, 3).forEach(i => todo(w, i.text)); if (S.list.length > 3) txt(w, `+${S.list.length - 3} meer`, 10, C.muted); }
-    else { txt(w, "Alles gedaan", 15, C.text, 7); txt(w, "niets meer voor vandaag", 10, C.muted); }
+    if (S.list.length) { S.list.slice(0, 3).forEach(i => todo(w, i.text, 12, "lijstje")); if (S.list.length > 3) txt(w, `+${S.list.length - 3} meer`, 10, C.muted, 5); }
+    else { txt(w, "Alles gedaan", 16, C.text, 8); txt(w, "niets meer voor vandaag", 10, C.muted, 5); }
   } else if (type === "taak") {
     const x = S.next[0];
-    if (x) { const t = w.addText(x.title); t.font = Font.boldSystemFont(14); t.textColor = C.text; t.lineLimit = 2; t.minimumScaleFactor = 0.8; w.addSpacer(4);
-      const soon = x.deadline <= addDays(today(), 1);
-      const r = w.addStack(); const pill = r.addStack(); pill.setPadding(2, 6, 2, 6); pill.cornerRadius = 6;
-      pill.backgroundColor = soon ? new Color("#e5484d", 0.16) : SURF;
-      txt(pill, dueLabel(x.deadline) + (x.time ? " · " + x.time : ""), 10, soon ? RED : C.muted, 6); w.addSpacer(3); }
-    else { txt(w, "Geen deadlines", 14, C.text, 7); }
-    if (S.late) txt(w, `${S.late} te laat`, 10, RED, 6);
+    if (x) { const t = w.addText(x.title); t.font = Font.boldSystemFont(15); t.textColor = C.text; t.lineLimit = 2; t.minimumScaleFactor = 0.8; w.addSpacer(5);
+      duePill(w, x.deadline, x.time); }
+    else txt(w, "Geen deadlines", 15, C.text, 8);
+    if (S.late) { w.addSpacer(3); txt(w, `${S.late} te laat`, 10, RED, 7); }
   } else {
-    const val = type === "kot" ? eur(S.kot) : type === "uitgave" ? eur(S.out) : type === "inkomst" ? eur(S.in) : (S.get ? "+" + eur(S.get) : S.owe ? "−" + eur(S.owe) : eur(0));
+    const val = type === "kot" ? eur(S.kot) : type === "uitgave" ? eur(S.out) : type === "inkomst" ? eur(S.in) : (S.get ? "+" + eur(S.get) : S.owe ? "-" + eur(S.owe) : eur(0));
     const sub = type === "kot" ? "terug van mama" : type === "uitgave" ? "uitgegeven deze maand" : type === "inkomst" ? "verdiend deze maand" : (S.get && S.owe ? `jij moet ${eur(S.owe)}` : S.owe ? "jij moet nog" : "te krijgen");
-    txt(w, val, 24, C.text, 7); txt(w, sub, 10, C.muted, 5);
+    txt(w, val, 26, C.text, 8); txt(w, sub, 10, C.muted, 5);
   }
-  w.addSpacer(8);
-  const btn = w.addStack(); btn.backgroundColor = soft(type, 0.16); btn.cornerRadius = 10; btn.setPadding(6, 8, 6, 8); btn.centerAlignContent();
-  btn.addSpacer(); sym(btn, "plus", 10, tint(type)); btn.addSpacer(4); txt(btn, "Toevoegen", 11, C.text, 7); btn.addSpacer();
+  w.addSpacer(9);
+  pillButton(w, type, "Toevoegen");
+}
+function duePill(st, d, time) {
+  const soon = d <= addDays(today(), 1);
+  const r = st.addStack(); const pill = r.addStack(); pill.setPadding(2, 7, 2, 7); pill.cornerRadius = 7;
+  pill.backgroundColor = soon ? dyn(new Color("#c92a2a", 0.12), new Color("#ff6b6b", 0.18)) : soft("taak", 0.12);
+  txt(pill, dueLabel(d) + (time ? " · " + time : ""), 10, soon ? RED : tint("taak"), 7);
+  return r;
 }
 
 /* stage-widget: klein en middelgroot */
-function progressBar(st, width, pct, h = 6) {
-  const bar = st.addStack(); bar.size = new Size(width, h); bar.cornerRadius = h / 2; bar.backgroundColor = soft("stage", 0.16);
+function progressBar(st, width, pct, h = 7) {
+  const bar = st.addStack(); bar.size = new Size(width, h); bar.cornerRadius = h / 2; bar.backgroundColor = soft("stage", 0.18);
   const fill = bar.addStack(); fill.size = new Size(Math.max(h, Math.round(width * pct / 100)), h); fill.cornerRadius = h / 2; fill.backgroundColor = tint("stage");
   bar.addSpacer();
 }
 function stageWidget(w, S, fam) {
   const medium = fam !== "small";
-  w.setPadding(14, medium ? 16 : 14, 12, medium ? 16 : 14);
+  w.setPadding(14, medium ? 16 : 14, 12, medium ? 16 : 14); w.backgroundColor = wash("stage");
   w.url = runUrl("stage");
   const top = w.addStack(); top.centerAlignContent();
-  const ic = top.addStack(); ic.size = new Size(26, 26); ic.cornerRadius = 8; ic.backgroundColor = soft("stage", 0.18); ic.centerAlignContent();
-  sym(ic, TYPES.stage.symbol, 13, tint("stage"));
-  top.addSpacer(7); txt(top, "Stage", 13, C.text, 7);
+  iconTile(top, "stage", 28); top.addSpacer(8); txt(top, "Stage", 13, tint("stage"), 7);
   if (!S) { w.addSpacer(); txt(w, "Geen verbinding", 12, C.muted); w.addSpacer(); return; }
   const G = S.stage;
   if (medium) { top.addSpacer(); if (G.place) txt(top, G.place, 10, C.muted, 5); }
   w.addSpacer();
   if (!medium) {
-    const v = w.addStack(); v.bottomAlignContent(); txt(v, hm(G.tot), 24, C.text, 7); v.addSpacer(3); txt(v, "/ " + G.goalH + "u", 11, C.muted, 6);
-    w.addSpacer(5); progressBar(w, 128, G.pct); w.addSpacer(4);
+    const v = w.addStack(); v.bottomAlignContent(); txt(v, hm(G.tot), 23, C.text, 8); v.addSpacer(2); txt(v, "/" + G.goalH + "u", 10, C.muted, 6);
+    w.addSpacer(6); progressBar(w, 128, G.pct); w.addSpacer(5);
     txt(w, G.tot >= G.goal ? "doel gehaald" : `${G.pct}% · nog ${hm(G.left)}`, 10, C.muted, 5);
   } else {
     const body = w.addStack(); body.topAlignContent();
     const left = body.addStack(); left.layoutVertically(); left.size = new Size(150, 0);
-    const v = left.addStack(); v.bottomAlignContent(); txt(v, hm(G.tot), 26, C.text, 7); v.addSpacer(3); txt(v, "/ " + G.goalH + "u", 12, C.muted, 6);
-    left.addSpacer(6); progressBar(left, 146, G.pct); left.addSpacer(6);
+    const v = left.addStack(); v.bottomAlignContent(); txt(v, hm(G.tot), 26, C.text, 8); v.addSpacer(3); txt(v, "/ " + G.goalH + "u", 12, C.muted, 6);
+    left.addSpacer(5); progressBar(left, 146, G.pct); left.addSpacer(6);
     const row = left.addStack(); row.spacing = 12;
-    [[G.pct + "%", "klaar"], [hm(G.left), "te doen"], [hm(G.week), "deze week"]].forEach(([a, b]) => { const c = row.addStack(); c.layoutVertically(); txt(c, a, 12, C.text, 7); txt(c, b, 9, C.muted, 4); });
+    [[G.pct + "%", "klaar"], [hm(G.left), "te doen"], [hm(G.week), "deze week"]].forEach(([a, b]) => { const c = row.addStack(); c.layoutVertically(); txt(c, a, 12, C.text, 7); txt(c, b, 9, C.muted, 5); });
     body.addSpacer(14);
     const right = body.addStack(); right.layoutVertically();
-    section(right, G.tasks.length ? "Te doen voor stage" : "Laatste keer", tint("stage"));
-    if (G.tasks.length) G.tasks.slice(0, 2).forEach(t => { const r = right.addStack(); r.centerAlignContent(); sym(r, "circle", 10, C.muted); r.addSpacer(6); txt(r, t.title, 12, C.text); if (t.deadline) { r.addSpacer(4); txt(r, dueLabel(t.deadline), 9, t.deadline <= addDays(today(), 1) ? RED : C.muted, 6); } right.addSpacer(3); });
-    else if (G.last) { txt(right, `${G.last.date.slice(8, 10)}/${G.last.date.slice(5, 7)} · ${hm(G.last.minutes)}`, 12, C.text, 6); const t = right.addText(G.last.what || ""); t.font = Font.systemFont(11); t.textColor = C.muted; t.lineLimit = 2; }
+    cap(right, G.tasks.length ? "Te doen voor stage" : "Laatste keer", tint("stage")); right.addSpacer(5);
+    if (G.tasks.length) G.tasks.slice(0, 2).forEach(t => { const r = right.addStack(); r.centerAlignContent(); sym(r, "circle", 11, tint("stage")); r.addSpacer(6); txt(r, t.title, 12, C.text, 5); if (t.deadline) { r.addSpacer(4); txt(r, dueLabel(t.deadline), 9, t.deadline <= addDays(today(), 1) ? RED : C.muted, 7); } right.addSpacer(4); });
+    else if (G.last) { txt(right, `${G.last.date.slice(8, 10)}/${G.last.date.slice(5, 7)} · ${hm(G.last.minutes)}`, 12, C.text, 7); const t = right.addText(G.last.what || ""); t.font = Font.systemFont(11); t.textColor = C.muted; t.lineLimit = 2; }
     else txt(right, "Nog geen uren", 12, C.muted);
     right.addSpacer();
   }
-  w.addSpacer(8);
-  const btn = w.addStack(); btn.url = runUrl("stage"); btn.backgroundColor = soft("stage", 0.16); btn.cornerRadius = 10; btn.setPadding(6, 8, 6, 8); btn.centerAlignContent();
-  btn.addSpacer(); sym(btn, "plus", 10, tint("stage")); btn.addSpacer(4); txt(btn, "Uren toevoegen", 11, C.text, 7); btn.addSpacer();
+  w.addSpacer(medium ? 6 : 9);
+  pillButton(w, "stage", "Uren toevoegen", runUrl("stage"), medium ? {py: 6} : {});
 }
 
 /* stage-widget met stagetaken i.p.v. uren */
 function stageTasksWidget(w, S, fam) {
   const medium = fam !== "small";
-  w.setPadding(14, medium ? 16 : 14, 12, medium ? 16 : 14);
+  w.setPadding(14, medium ? 16 : 14, 12, medium ? 16 : 14); w.backgroundColor = wash("stage");
   w.url = runUrl("stage");
   const top = w.addStack(); top.centerAlignContent();
-  const ic = top.addStack(); ic.size = new Size(26, 26); ic.cornerRadius = 8; ic.backgroundColor = soft("stage", 0.18); ic.centerAlignContent();
-  sym(ic, "checklist", 13, tint("stage"));
-  top.addSpacer(7); txt(top, medium ? "Te doen voor stage" : "Stagetaken", 13, C.text, 7);
+  iconTile(top, "stage", 28, "checklist"); top.addSpacer(8); txt(top, medium ? "Te doen voor stage" : "Stagetaken", 13, tint("stage"), 7);
   if (!S) { w.addSpacer(); txt(w, "Geen verbinding", 12, C.muted); w.addSpacer(); return; }
-  const G = S.stage, n = medium ? 3 : 3;
-  if (G.tasks.length) { top.addSpacer(); txt(top, String(G.tasks.length), 12, C.muted, 6); }
+  const G = S.stage, n = 3;
+  if (G.tasks.length) { top.addSpacer(); const c = top.addStack(); c.setPadding(1, 7, 1, 7); c.cornerRadius = 8; c.backgroundColor = soft("stage", 0.14); txt(c, String(G.tasks.length), 11, tint("stage"), 7); }
   w.addSpacer(medium ? 8 : 9);
   if (G.tasks.length) {
     G.tasks.slice(0, n).forEach(t => {
       const r = w.addStack(); r.centerAlignContent();
       const soon0 = t.deadline && t.deadline <= addDays(today(), 1);
-      sym(r, soon0 ? "exclamationmark.circle" : "circle", 10, soon0 ? RED : C.muted); r.addSpacer(6);
-      const tt = r.addText(t.title); tt.font = Font.systemFont(medium ? 13 : 12); tt.textColor = C.text; tt.lineLimit = 1; tt.minimumScaleFactor = 0.8;
-      if (t.deadline && medium) { r.addSpacer(4); const soon = t.deadline <= addDays(today(), 1); const pl = r.addStack(); pl.setPadding(1, 4, 1, 4); pl.cornerRadius = 5; pl.backgroundColor = soon ? new Color("#e5484d", 0.16) : SURF; txt(pl, dueLabel(t.deadline), 9, soon ? RED : C.muted, 6); }
+      sym(r, soon0 ? "exclamationmark.circle.fill" : "circle", 11, soon0 ? RED : tint("stage")); r.addSpacer(6);
+      const tt = r.addText(t.title); tt.font = Font.mediumSystemFont(medium ? 13 : 12); tt.textColor = C.text; tt.lineLimit = 1; tt.minimumScaleFactor = 0.8;
+      if (t.deadline && medium) { r.addSpacer(4); duePill(r, t.deadline); }
       w.addSpacer(medium ? 4 : 5);
     });
     if (G.tasks.length > n) txt(w, `+${G.tasks.length - n} meer`, 10, C.muted, 5);
-  } else { txt(w, "Niets open", 14, C.text, 7); txt(w, "geen stagetaken meer", 10, C.muted, 5); }
+  } else { txt(w, "Niets open", 15, C.text, 8); txt(w, "geen stagetaken meer", 10, C.muted, 5); }
   w.addSpacer();
-  const btn = w.addStack(); btn.url = runUrl("stage"); btn.backgroundColor = soft("stage", 0.16); btn.cornerRadius = 10; btn.setPadding(6, 8, 6, 8); btn.centerAlignContent();
-  btn.addSpacer(); sym(btn, "plus", 10, tint("stage")); btn.addSpacer(4); txt(btn, "Uren toevoegen", 11, C.text, 7); btn.addSpacer();
+  pillButton(w, "stage", "Uren toevoegen", runUrl("stage"));
 }
 
-/* middelgrote en grote widget: overzicht + snelknoppen */
-const RED = new Color("#e5484d");
-const soft = (t, a) => { const c = (TYPES[t] || TYPES.overzicht).color; return c === "#2f2e2b" ? dyn(new Color("#2f2e2b", a), new Color("#ecebe7", a)) : new Color(c, a); };
-const SURF = dyn(new Color("#f4f4f2"), new Color("#2a2a2c"));
-function sym(st, name, size, color) { const i = st.addImage(SFSymbol.named(name).image); i.imageSize = new Size(size, size); i.tintColor = color; return i; }
-function txt(st, s, size, color, weight) {
-  const t = st.addText(s); t.font = weight === 7 ? Font.boldSystemFont(size) : weight === 6 ? Font.semiboldSystemFont(size) : weight === 5 ? Font.mediumSystemFont(size) : Font.systemFont(size);
-  t.textColor = color || C.text; t.lineLimit = 1; t.minimumScaleFactor = 0.75; return t;
-}
-function section(st, title, color, extra, gap = 4) {
+/* middelgrote en grote widget: zoals het startscherm van Life OS 2.0 */
+function todo(st, text, size = 12, type = "lijstje") {
   const r = st.addStack(); r.centerAlignContent();
-  const dot = r.addStack(); dot.size = new Size(6, 6); dot.cornerRadius = 3; dot.backgroundColor = color; r.addSpacer(5);
-  const t = txt(r, title.toUpperCase(), 9, C.muted, 6);
-  if (extra) { r.addSpacer(4); txt(r, extra, 9, RED, 6); }
-  st.addSpacer(gap);
-}
-function todo(st, text, size = 12) {
-  const r = st.addStack(); r.centerAlignContent();
-  sym(r, "circle", size - 2, C.muted); r.addSpacer(size > 12 ? 8 : 6); txt(r, text, size, C.text);
+  sym(r, "circle", size - 1, tint(type)); r.addSpacer(size > 12 ? 8 : 6); txt(r, text, size, C.text, 5);
   st.addSpacer(size > 12 ? 6 : 3);
 }
-function due(st, x) {
-  const r = st.addStack(); r.centerAlignContent();
-  const t = today(), soon = x.deadline <= addDays(t, 1);
-  txt(r, x.title, 12, C.text); r.addSpacer(5);
-  const pill = r.addStack(); pill.setPadding(1, 5, 1, 5); pill.cornerRadius = 5;
-  pill.backgroundColor = soon ? new Color("#e5484d", 0.16) : SURF;
-  txt(pill, dueLabel(x.deadline), 9, soon ? RED : C.muted, 6);
-  st.addSpacer(3);
-}
-function statTile(st, type, value, label, large) {
+function crow(st, type, value, label, large) {
   const b = st.addStack(); b.url = runUrl(type); b.centerAlignContent();
-  b.backgroundColor = SURF; b.cornerRadius = 12; b.setPadding(large ? 8 : 5, large ? 10 : 8, large ? 8 : 5, large ? 10 : 8);
-  const ic = b.addStack(); ic.size = new Size(large ? 24 : 20, large ? 24 : 20); ic.cornerRadius = large ? 7 : 6; ic.backgroundColor = soft(type, 0.18); ic.centerAlignContent();
-  sym(ic, TYPES[type].symbol, large ? 12 : 10, tint(type));
-  b.addSpacer(7);
+  b.borderWidth = 1; b.borderColor = C.line; b.cornerRadius = 14; b.setPadding(large ? 8 : 5, large ? 9 : 7, large ? 8 : 5, large ? 9 : 7);
+  iconTile(b, type, large ? 26 : 22); b.addSpacer(7);
   const col = b.addStack(); col.layoutVertically();
-  txt(col, value, large ? 15 : 13, C.text, 7);
-  txt(col, label, 9, C.muted, 4);
+  txt(col, label, 9, tint(type), 7);
+  txt(col, value, large ? 16 : 13, C.text, 8);
   b.addSpacer();
   return b;
 }
@@ -345,47 +349,110 @@ function buttons(w, types, tall) {
   const row = w.addStack(); row.spacing = tall ? 8 : 6;
   types.forEach(t => {
     const b = row.addStack(); b.url = runUrl(t); b.centerAlignContent();
-    b.backgroundColor = soft(t, tall ? 0.2 : 0.14); b.cornerRadius = tall ? 12 : 10; b.setPadding(tall ? 9 : 6, 6, tall ? 9 : 6, 6);
+    b.backgroundColor = tall ? tint(t) : soft(t, 0.13); b.cornerRadius = tall ? 13 : 10; b.setPadding(tall ? 10 : 6, 6, tall ? 10 : 6, 6);
     b.addSpacer();
-    sym(b, tall ? "plus.circle.fill" : TYPES[t].symbol, tall ? 14 : 11, tint(t));
+    sym(b, tall ? "plus" : TYPES[t].symbol, tall ? 12 : 11, tall ? onTint(t) : tint(t));
     b.addSpacer(4);
-    txt(b, TYPES[t].label, tall ? 13 : 10, C.text, tall ? 7 : 6);
+    txt(b, TYPES[t].label, tall ? 13 : 10, tall ? onTint(t) : tint(t), 7);
     b.addSpacer();
   });
 }
 async function bigWidget(w, S, fam) {
   const large = fam === "large";
   w.url = APP_URL;
-  w.setPadding(large ? 16 : 12, large ? 16 : 15, large ? 16 : 11, large ? 16 : 15);
+  // donker: geen puur zwart maar een diep nachtblauw, net als de getinte kleine widgets
+  w.backgroundColor = dyn(new Color("#ffffff"), new Color(hexMix("#86a8e8", "#141413", 0.17)));
+  w.setPadding(large ? 16 : 12, large ? 16 : 14, large ? 16 : 11, large ? 16 : 14);
+  const d = new Date(), h = d.getHours();
   const top = w.addStack(); top.centerAlignContent();
-  const logo = top.addStack(); logo.size = new Size(18, 18); logo.cornerRadius = 5; logo.backgroundColor = C.text; logo.centerAlignContent();
-  sym(logo, "bolt.fill", 10, C.bg);
-  top.addSpacer(6); txt(top, "Life OS", 13, C.text, 7);
+  brand(top, large ? 20 : 17); top.addSpacer(6);
+  if (large) txt(top, (h < 12 ? "Goeiemorgen" : h < 18 ? "Goeiemiddag" : "Goeienavond") + ", Ade", 17, C.text, 8);
+  else txt(top, "Life OS", 13, C.text, 8);
   top.addSpacer();
-  const d = new Date(); txt(top, d.toLocaleDateString("nl-BE", {weekday: "long", day: "numeric", month: "short"}), 10, C.muted, 5);
-  w.addSpacer(large ? 12 : 6);
+  txt(top, d.toLocaleDateString("nl-BE", {weekday: large ? "long" : "short", day: "numeric", month: "short"}), 10, C.muted, 5);
+  w.addSpacer(large ? 12 : 7);
   if (!S) { txt(w, "Geen verbinding · tik om opnieuw te proberen", 12, C.muted); w.addSpacer(); return; }
   const body = w.addStack(); body.topAlignContent();
+  // links: het lijstje, zonder kader
   const left = body.addStack(); left.layoutVertically();
-  section(left, "Vandaag", tint("lijstje"), "", large ? 7 : 4);
-  const nL = large ? 6 : 2;
+  left.setPadding(large ? 2 : 0, 0, 0, 0);
+  const lh = left.addStack(); lh.centerAlignContent(); cap(lh, "Vandaag", tint("lijstje")); lh.addSpacer();
+  if (S.list.length) txt(lh, String(S.list.length), 10, tint("lijstje"), 7);
+  left.addSpacer(large ? 7 : 3);
+  const nL = large ? 5 : 2;
   if (S.list.length) S.list.slice(0, nL).forEach(i => todo(left, i.text, large ? 15 : 12));
-  else { txt(left, "Alles gedaan ✓", large ? 15 : 12, C.muted); left.addSpacer(3); }
-  if (large && S.list.length > nL) { txt(left, `+${S.list.length - nL} meer`, 10, C.muted); left.addSpacer(3); }
-  left.addSpacer(large ? 10 : 4);
-  section(left, large ? "Deadline" : "Deadlines", tint("taak"), S.late ? `${S.late} te laat` : "", large ? 7 : 4);
-  const nD = 1;
-  if (S.next.length) S.next.slice(0, nD).forEach(x => due(left, x));
-  else txt(left, "Geen deadlines", 12, C.muted);
-  body.addSpacer(large ? 12 : 10);
-  const right = body.addStack(); right.layoutVertically(); right.spacing = large ? 6 : 4; right.size = new Size(large ? 124 : 112, 0);
-  statTile(right, "kot", eur(S.kot), large ? "terug van mama" : "kot", large);
-  if (large || !(S.get || S.owe)) statTile(right, "uitgave", eur(S.out), "uitgegeven", large);
-  if (S.get || S.owe) statTile(right, "voorschot", S.get ? "+" + eur(S.get) : "−" + eur(S.owe), S.get ? (S.owe && large ? `jij −${eur(S.owe)}` : "te krijgen") : "jij moet nog", large);
-  if (large) statTile(right, "inkomst", eur(S.in), "verdiend", large);
-  w.addSpacer();
-  if (large) { buttons(w, ["uitgave", "inkomst", "lijstje", "voorschot"]); w.addSpacer(8); buttons(w, ["kot", "taak"], true); }
+  else { txt(left, "Alles gedaan", large ? 15 : 12, C.muted, 6); left.addSpacer(3); }
+  if (large && S.list.length > nL) { txt(left, `+${S.list.length - nL} meer`, 10, C.muted, 5); left.addSpacer(2); }
+  if (large) {
+    left.addSpacer(); 
+    const dl = left.addStack(); dl.layoutVertically();
+    const dh = dl.addStack(); dh.centerAlignContent(); cap(dh, "Eerste deadline", tint("taak")); if (S.late) { dh.addSpacer(5); txt(dh, `${S.late} te laat`, 10, RED, 7); }
+    dl.addSpacer(4);
+    if (S.next.length) { const x = S.next[0]; txt(dl, x.title, 13, C.text, 6); dl.addSpacer(3); duePill(dl, x.deadline, x.time); }
+    else txt(dl, "Geen deadlines", 12, C.muted, 5);
+  }
+  left.addSpacer();
+  body.addSpacer(large ? 10 : 8);
+  // rechts: categorierijen zoals op het startscherm
+  const right = body.addStack(); right.layoutVertically(); right.spacing = large ? 6 : 4; right.size = new Size(large ? 126 : 112, 0);
+  crow(right, "kot", eur(S.kot), large ? "Terug van mama" : "Kot", large);
+  if (large || !(S.get || S.owe)) crow(right, "uitgave", eur(S.out), "Uitgegeven", large);
+  if (S.get || S.owe) crow(right, "voorschot", S.get ? "+" + eur(S.get) : "-" + eur(S.owe), S.get ? "Te krijgen" : "Jij moet nog", large);
+  if (large) crow(right, "inkomst", eur(S.in), "Verdiend", large);
+  w.addSpacer(large ? 12 : 7);
+  if (large) { buttons(w, ["uitgave", "inkomst", "lijstje", "voorschot"]); w.addSpacer(7); buttons(w, ["kot", "taak"], true); }
   else buttons(w, ["kot", "uitgave", "taak", "lijstje"]);
+}
+
+
+/* rustige grote widget: je dag centraal, cijfers als één rustige regel, weinig knoppen */
+function calmWidget(w, S, fam) {
+  const large = fam !== "medium";
+  w.url = APP_URL;
+  w.backgroundColor = dyn(new Color("#ffffff"), new Color(hexMix("#86a8e8", "#141413", 0.17)));
+  w.setPadding(large ? 20 : 14, 20, large ? 18 : 12, 20);
+  const d = new Date(), h = d.getHours();
+  const top = w.addStack(); top.centerAlignContent();
+  const greet = (h < 12 ? "Goeiemorgen" : h < 18 ? "Goeiemiddag" : "Goeienavond") + ", Ade";
+  brand(top, 16); top.addSpacer(7);
+  if (large) { txt(top, d.toLocaleDateString("nl-BE", {weekday: "long", day: "numeric", month: "long"}), 11, C.muted, 6); w.addSpacer(8); txt(w, greet, 24, C.text, 8); }
+  else { txt(top, greet, 15, C.text, 8); top.addSpacer(); txt(top, d.toLocaleDateString("nl-BE", {weekday: "short", day: "numeric", month: "short"}), 10, C.muted, 6); }
+  if (!S) { w.addSpacer(); txt(w, "Geen verbinding · tik om opnieuw te proberen", 12, C.muted); w.addSpacer(); return; }
+  w.addSpacer(large ? 14 : 8);
+  // je dag
+  const lh = w.addStack(); lh.centerAlignContent();
+  cap(lh, "Vandaag", tint("lijstje"));
+  if (S.list.length) { lh.addSpacer(6); txt(lh, `${S.list.length} open`, 10, C.muted, 6); }
+  w.addSpacer(large ? 8 : 5);
+  const nL = large ? 3 : 2;
+  if (S.list.length) S.list.slice(0, nL).forEach(i => { const r = w.addStack(); r.centerAlignContent(); sym(r, "circle", large ? 15 : 13, tint("lijstje")); r.addSpacer(10); txt(r, i.text, large ? 16 : 14, C.text, 5); w.addSpacer(large ? 7 : 4); });
+  else { txt(w, "Niets meer te doen vandaag", large ? 16 : 14, C.muted, 5); w.addSpacer(6); }
+  w.addSpacer();
+  if (large) {
+    // volgende deadline als één zin
+    if (S.next.length) {
+      const x = S.next[0], soon = x.deadline <= addDays(today(), 1);
+      const r = w.addStack(); r.centerAlignContent();
+      const dot = r.addStack(); dot.size = new Size(6, 6); dot.cornerRadius = 3; dot.backgroundColor = soon ? RED : tint("taak"); r.addSpacer(7);
+      txt(r, x.title, 13, C.text, 6); r.addSpacer(6); txt(r, dueLabel(x.deadline), 12, soon ? RED : C.muted, 6);
+      w.addSpacer(10);
+    }
+    // dunne lijn + drie rustige cijfers
+    const ln = w.addStack(); ln.size = new Size(0, 1); ln.backgroundColor = C.line; ln.addSpacer();
+    w.addSpacer(10);
+    const nums = w.addStack(); nums.topAlignContent();
+    const cell = (type, label, value) => { const c = nums.addStack(); c.layoutVertically(); c.url = runUrl(type); txt(c, label, 10, tint(type), 7); c.addSpacer(2); txt(c, value, 17, C.text, 8); };
+    cell("kot", "Kot", eur(S.kot)); nums.addSpacer();
+    cell("uitgave", "Uitgegeven", eur(S.out)); nums.addSpacer();
+    if (S.get || S.owe) cell("voorschot", S.get ? "Te krijgen" : "Jij moet", (S.get ? "+" : "-") + eur(S.get || S.owe)); else cell("inkomst", "Verdiend", eur(S.in));
+    w.addSpacer(12);
+  }
+  // drie zachte knoppen
+  const row = w.addStack(); row.spacing = 8;
+  [["kot", "Kot"], ["taak", "Taak"], ["lijstje", "Lijstje"]].forEach(([t, l]) => {
+    const b = row.addStack(); b.url = runUrl(t); b.backgroundColor = soft(t, 0.13); b.cornerRadius = 12; b.setPadding(8, 6, 8, 6); b.centerAlignContent();
+    b.addSpacer(); sym(b, "plus", 11, tint(t)); b.addSpacer(4); txt(b, l, 12, tint(t), 7); b.addSpacer();
+  });
 }
 
 /* ---------------- invoeren (mooi formulier) ---------------- */
@@ -456,34 +523,36 @@ async function saveOthers(d, settings) {
 function formHTML(type, ctx) {
   const T = TYPES[type];
   return `<!DOCTYPE html><html lang="nl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,viewport-fit=cover">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Space+Grotesk:wght@600;700&display=swap">
 <style>
-:root{--bg:#fbfbfa;--surface:#fff;--s2:#f2f2f0;--border:#e5e4e0;--text:#2f2e2b;--t2:#6b6a66;--t3:#9b9a96;--accent:${T.color};--ok:#0a8a0a;--okbg:#e5f3e5;--warn:#c03030}
-@media (prefers-color-scheme:dark){:root{--bg:#141413;--surface:#1f1f1e;--s2:#2a2a28;--border:#363632;--text:#ecebe7;--t2:#b3b2ab;--t3:#85847e;--okbg:#18301a;--ok:#4cc24c;--warn:#f08a8a}}
+:root{--bg:#ffffff;--surface:#fff;--s2:#f6f4ef;--border:#ece9e2;--text:#1c1b19;--t2:#6b6a66;--t3:#9b9a96;--accent:${T.color};--on:#fff;--ok:#1f7a43;--okbg:#e4f2e9;--warn:#c92a2a;--ease:cubic-bezier(0.23,1,0.32,1)}
+@media (prefers-color-scheme:dark){:root{--bg:#141413;--surface:#1c1c1a;--s2:#22221f;--border:#2e2e2b;--text:#ecebe7;--t2:#b3b2ab;--t3:#85847e;--accent:${DARKP[T.color] || T.color};--on:#141413;--okbg:#18301f;--ok:#4cc27a;--warn:#ff6b6b}}
 *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
-body{margin:0;background:var(--bg);color:var(--text);font:16px/1.4 -apple-system,system-ui,sans-serif;padding:64px 18px calc(110px + env(safe-area-inset-bottom))}
-h1{font-size:26px;margin:4px 0 2px;letter-spacing:-.02em;display:flex;align-items:center;gap:10px}
-h1 i{width:12px;height:12px;border-radius:4px;background:var(--accent);display:inline-block}
+body{margin:0;background:var(--bg);color:var(--text);font:16px/1.4 Inter,-apple-system,system-ui,sans-serif;padding:64px 18px calc(110px + env(safe-area-inset-bottom))}
+h1{font-family:"Space Grotesk",-apple-system,system-ui,sans-serif;font-size:30px;font-weight:700;margin:4px 0 2px;letter-spacing:-.02em;display:flex;align-items:center;gap:10px}
+h1 i{width:14px;height:14px;border-radius:5px;background:var(--accent);display:inline-block}
 .sub{color:var(--t2);font-size:14px;margin-bottom:18px}
 label.l{display:block;font-size:13px;font-weight:600;color:var(--t2);margin:16px 0 6px}
-.amount{width:100%;border:0;border-bottom:2px solid var(--border);background:none;font-size:42px;font-weight:700;letter-spacing:-.02em;color:var(--text);padding:6px 0;font-variant-numeric:tabular-nums}
+.amount{width:100%;border:0;border-bottom:2px solid var(--border);background:none;font-family:"Space Grotesk",-apple-system,system-ui,sans-serif;font-size:44px;font-weight:700;transition:border-color 150ms ease;letter-spacing:-.02em;color:var(--text);padding:6px 0;font-variant-numeric:tabular-nums}
 .amount:focus{outline:none;border-color:var(--accent)}
-input.t,select.t{width:100%;border:1px solid var(--border);background:var(--surface);color:var(--text);border-radius:12px;padding:12px 14px;font-size:17px}
-input.t:focus{outline:2px solid var(--accent);border-color:transparent}
+input.t,select.t{width:100%;min-height:48px;border:1px solid var(--border);background:var(--surface);color:var(--text);border-radius:12px;padding:12px 14px;font-size:17px;transition:border-color 150ms ease,box-shadow 150ms ease}
+input.t:focus,select.t:focus,textarea.t:focus{outline:none;border-color:var(--accent);box-shadow:0 0 0 3px color-mix(in srgb,var(--accent) 18%,transparent)}
 .chips{display:flex;flex-wrap:wrap;gap:8px}
-.chip{border:1px solid var(--border);background:var(--surface);color:var(--text);border-radius:999px;padding:9px 15px;font-size:15px;font-weight:500}
-.chip.on{background:var(--text);color:var(--bg);border-color:var(--text)}
+.chip{border:1px solid var(--border);background:var(--surface);color:var(--text);border-radius:999px;padding:9px 15px;font-size:15px;font-weight:500;transition:transform 160ms var(--ease),background-color 150ms ease,border-color 150ms ease,color 150ms ease}
+.chip.on{background:var(--accent);color:var(--on);border-color:var(--accent);font-weight:600}
 .chip:active,.btn:active,.card:active{transform:scale(.97)}
 .cards{display:grid;grid-template-columns:1fr 1fr;gap:10px}
-.card{border:1.5px solid var(--border);background:var(--surface);border-radius:14px;padding:12px;text-align:left;color:var(--text)}
+.card{transition:transform 160ms var(--ease),border-color 150ms ease,background-color 150ms ease;border:2px solid var(--border);background:var(--surface);border-radius:14px;padding:12px;text-align:left;color:var(--text)}
 .card b{display:block;font-size:16px}.card span{font-size:13px;color:var(--t2)}
-.card.on{border-color:var(--text);background:var(--s2)}
+.card.on{border-color:var(--accent);background:color-mix(in srgb,var(--accent) 8%,var(--surface))}
 .row{display:flex;gap:8px;align-items:center}
 .split{display:flex;gap:8px;align-items:center;font-size:14px;color:var(--t2)}
 .split input{width:96px;border:1px solid var(--border);background:var(--surface);color:var(--text);border-radius:10px;padding:9px;font-size:16px}
 .check{display:flex;gap:10px;align-items:flex-start;background:var(--s2);border-radius:12px;padding:12px;margin-top:14px;font-size:15px}
 .check input{width:22px;height:22px;margin:0;accent-color:var(--accent)}
+@media (prefers-reduced-motion:reduce){.chip,.card,.btn{transition:none}.chip:active,.btn:active,.card:active{transform:none}}
 .bar{position:fixed;left:0;right:0;bottom:0;padding:12px 18px calc(12px + env(safe-area-inset-bottom));background:linear-gradient(transparent,var(--bg) 30%)}
-.btn{width:100%;border:0;border-radius:14px;padding:16px;font-size:18px;font-weight:700;background:var(--text);color:var(--bg)}
+.btn{width:100%;border:0;border-radius:16px;padding:16px;font-size:18px;font-weight:700;background:var(--accent);color:var(--on);transition:transform 160ms var(--ease),opacity 150ms ease}
 .btn:disabled{opacity:.35}
 .err{color:var(--warn);font-size:14px;min-height:20px;margin-top:10px}
 .done{display:none;text-align:center;padding:40px 10px}
@@ -504,7 +573,7 @@ textarea.t{width:100%;border:1px solid var(--border);background:var(--surface);c
 .pick input{border:0;background:none;color:var(--text);font-size:16px;font-family:inherit;text-align:right;min-width:0}
 .seg3{display:grid;grid-template-columns:repeat(3,1fr);gap:4px;background:var(--s2);border-radius:12px;padding:4px;margin-bottom:18px}
 .seg3 button{border:0;background:none;color:var(--t2);border-radius:9px;padding:10px 4px;font-size:14px;font-weight:600}
-.seg3 button.on{background:var(--surface);color:var(--text);box-shadow:0 1px 3px rgba(0,0,0,.15)}
+.seg3 button.on{background:var(--surface);color:var(--accent);box-shadow:0 1px 3px rgba(0,0,0,.15)}
 </style></head><body>
 <script>window.onerror=function(m,u,l){document.body.insertAdjacentHTML("afterbegin","<p style=\\"color:#f08a8a\\">Fout: "+m+" (regel "+l+")</p>")};</script>
 <form id="f" autocomplete="off" onsubmit="return false">
