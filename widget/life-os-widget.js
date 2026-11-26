@@ -490,7 +490,7 @@ input.t:focus{outline:2px solid var(--accent);border-color:transparent}
 .done .tick{width:64px;height:64px;border-radius:50%;background:var(--okbg);color:var(--ok);display:grid;place-items:center;font-size:34px;margin:0 auto 14px}
 .done p{color:var(--t2);margin:6px 0 22px}
 .hidden{display:none}
-.tri{display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-top:12px}.tri label{display:block}.l2{display:block;font-size:13px;font-weight:600;color:var(--t2);margin-bottom:6px}.tri .t{padding:11px 10px}
+.tri{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;margin-top:12px}.tri label{display:block;min-width:0}.l2{display:block;font-size:13px;font-weight:600;color:var(--t2);margin-bottom:6px}.tri .t{display:block;width:100%;min-width:0;max-width:100%;height:52px;padding:0 8px;-webkit-appearance:none;appearance:none;text-align:center;font-size:17px;line-height:52px}.tri input[type=time]::-webkit-date-and-time-value{text-align:center}
 textarea.t{width:100%;border:1px solid var(--border);background:var(--surface);color:var(--text);border-radius:12px;padding:12px 14px;font-size:16px;font-family:inherit;resize:vertical}
 .prow{display:grid;grid-template-columns:1fr 110px 40px;gap:8px;margin-bottom:8px;align-items:center}
 .prow .t{padding:11px 12px}.prow .pa{text-align:right;font-variant-numeric:tabular-nums}
@@ -546,11 +546,12 @@ function calcMine() {
 function draw() {
   let h = ""; const keepAmt = $("#amount") ? $("#amount").value : "", keepDesc = $("#desc") ? $("#desc").value : "";
   $("#ttl").textContent = ORIG === "kot" ? (TYPE === "kot" ? "Kot" : st.dir === "out" ? "Schuld bij iemand" : "Voorschot voor iemand") : TITLES[TYPE];
-  $("#dot").style.background = TYPE === "kot" ? "" : (CTX.othersColor || "");
+  $("#dot").style.background = TYPE === "voorschot" ? (CTX.othersColor || "") : "";
   $("#sw").innerHTML = ORIG !== "kot" ? "" : '<div class="seg3">' + [["kot", "Kot · " + CTX.recipient], ["in", "Voorschot"], ["out", "Schuld"]].map(o => '<button type="button" data-sw="' + o[0] + '" class="' + ((TYPE === "kot" ? "kot" : st.dir) === o[0] ? "on" : "") + '">' + esc(o[1]) + '</button>').join("") + '</div>';
   if (TYPE === "stage") { $("#sub").textContent = (CTX.place ? CTX.place + " · " : "") + CTX.stageTot + " van " + CTX.goal + "u";
     h = '<div class="pick on"><span>Datum</span><input type="date" id="sdate" value="' + CTX.today + '" max="' + CTX.today + '"></div>' +
-      '<div class="tri"><label><span class="l2">Van</span><input class="t" type="time" id="from" value="' + CTX.lastFrom + '"></label><label><span class="l2">Tot</span><input class="t" type="time" id="to" value="' + CTX.lastTo + '"></label><label><span class="l2">Pauze (min)</span><input class="t" id="pause" inputmode="numeric" placeholder="0"></label></div>' +
+      '<div class="tri"><label><span class="l2">Van</span><input class="t" type="time" id="from" value="' + CTX.lastFrom + '"></label><label><span class="l2">Tot</span><input class="t" type="time" id="to" value="' + CTX.lastTo + '"></label></div>' +
+      '<div class="pick" style="margin-top:10px"><span>Pauze (minuten)</span><input id="pause" inputmode="numeric" placeholder="0" style="width:90px"></div>' +
       '<div class="mine" id="scalc"></div>' +
       '<label class="l">Wat heb je gedaan?</label><textarea class="t" id="what" rows="4" placeholder="bv. inspanningstest op de fiets meegevolgd"></textarea>';
   } else if (TYPE === "kot") { $("#sub").textContent = "Voorgeschoten voor " + CTX.recipient;
