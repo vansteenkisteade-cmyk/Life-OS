@@ -1,6 +1,6 @@
 // Life OS – widgets & snel invoeren voor Scriptable (iPhone)
 // Eén script voor alle widgets. Kies per widget het type via "Parameter":
-//   kot · uitgave · inkomst · lijstje · taak · voorschot · overzicht
+//   kot · uitgave · inkomst · lijstje · taak · voorschot · stage · stagetaken · overzicht
 // Tik op een widget → je vult meteen bedrag/omschrijving in → opgeslagen in je Life OS.
 
 const APP_URL = "https://vansteenkisteade-cmyk.github.io/Life-OS/";
@@ -12,6 +12,8 @@ const TYPES = {
   lijstje:   {label: "Lijstje",    symbol: "checklist",              color: "#6250d6"},
   taak:      {label: "Taak",       symbol: "checkmark.circle.fill",  color: "#2f2e2b"},
   voorschot: {label: "Voorschot",  symbol: "person.2.fill",          color: "#c98500"},
+  stage:     {label: "Stage",      symbol: "briefcase.fill",         color: "#0e9384"},
+  stagetaken:{label: "Stage",      symbol: "briefcase.fill",         color: "#0e9384"},
   overzicht: {label: "Life OS",    symbol: "square.grid.2x2.fill",   color: "#2f2e2b"}
 };
 
@@ -128,8 +130,8 @@ const pushItem = (name, item) => updateDoc(name, d => { d = d || {items: []}; d.
 /* ---------------- gegevens voor de widgets ---------------- */
 async function loadAll() {
   const month = today().slice(0, 7);
-  const [settings, tasks, kot, others, day, tx] = await Promise.all(["settings", "tasks", "kot", "others", "day", "tx-" + month].map(n => getDoc(n).then(r => r.data).catch(() => null)));
-  return {settings: settings || {}, tasks: (tasks && tasks.items) || [], kot: kot || {items: [], statements: [], payments: []}, others: (others && others.items) || [], day: (day && day.items) || [], tx: (tx && tx.items) || []};
+  const [settings, tasks, kot, others, day, tx, stage] = await Promise.all(["settings", "tasks", "kot", "others", "day", "tx-" + month, "stage"].map(n => getDoc(n).then(r => r.data).catch(() => null)));
+  return {settings: settings || {}, tasks: (tasks && tasks.items) || [], kot: kot || {items: [], statements: [], payments: []}, others: (others && others.items) || [], day: (day && day.items) || [], tx: (tx && tx.items) || [], stage: stage || {}};
 }
 function kotOpen(k) {
   const items = k.items || [], ids = new Set((k.statements || []).map(s => s.id));
@@ -150,8 +152,16 @@ function stats(D) {
     list: D.day.filter(i => !i.done && i.date === t),
     late: openTasks.filter(x => x.deadline < t).length,
     next: openTasks.filter(x => x.deadline >= t).slice(0, 6),
-    get, owe
+    get, owe, stage: stageStats(D.stage)
   };
+}
+const hm = min => { min = Math.round(min || 0); return Math.floor(min / 60) + "u" + pad(min % 60); };
+function stageStats(st) {
+  st = st || {}; const es = (st.entries || []).slice().sort((a, b) => (a.date + a.from).localeCompare(b.date + b.from));
+  const goal = (+st.goal || 130) * 60, tot = es.reduce((a, e) => a + (e.minutes || 0), 0);
+  const d = new Date(); d.setDate(d.getDate() - ((d.getDay() + 6) % 7)); const ws = iso(d);
+  return {tot, goal, goalH: +st.goal || 130, pct: Math.min(100, Math.round(tot / goal * 100)), left: Math.max(0, goal - tot), week: es.filter(e => e.date >= ws).reduce((a, e) => a + e.minutes, 0),
+    count: es.length, last: es[es.length - 1] || null, tasks: (st.tasks || []).filter(t => !t.done).sort((a, b) => (a.deadline || "9999").localeCompare(b.deadline || "9999")), place: st.place || ""};
 }
 const dueLabel = d => { const t = today(); if (d === t) return "vandaag"; if (d === addDays(t, 1)) return "morgen"; return d.slice(8, 10) + "/" + d.slice(5, 7); };
 
@@ -178,6 +188,8 @@ async function buildWidget(type) {
   if (!kcGet("refresh")) { header(w, type, 18); w.addSpacer(); line(w, "Tik om te koppelen", 12, C.muted); w.url = `scriptable:///run/${encodeURIComponent(Script.name())}`; return w; }
   let S = null; try { S = stats(await loadAll()); } catch (e) { S = null; }
   const fam = config.widgetFamily || "small";
+  if (type === "stage") { stageWidget(w, S, fam); return w; }
+  if (type === "stagetaken") { stageTasksWidget(w, S, fam); return w; }
   if (type === "overzicht" || fam === "medium" || fam === "large") { await bigWidget(w, S, fam); return w; }
   smallWidget(w, type, S);
   return w;
@@ -214,6 +226,77 @@ function smallWidget(w, type, S) {
   w.addSpacer(8);
   const btn = w.addStack(); btn.backgroundColor = soft(type, 0.16); btn.cornerRadius = 10; btn.setPadding(6, 8, 6, 8); btn.centerAlignContent();
   btn.addSpacer(); sym(btn, "plus", 10, tint(type)); btn.addSpacer(4); txt(btn, "Toevoegen", 11, C.text, 7); btn.addSpacer();
+}
+
+/* stage-widget: klein en middelgroot */
+function progressBar(st, width, pct, h = 6) {
+  const bar = st.addStack(); bar.size = new Size(width, h); bar.cornerRadius = h / 2; bar.backgroundColor = soft("stage", 0.16);
+  const fill = bar.addStack(); fill.size = new Size(Math.max(h, Math.round(width * pct / 100)), h); fill.cornerRadius = h / 2; fill.backgroundColor = tint("stage");
+  bar.addSpacer();
+}
+function stageWidget(w, S, fam) {
+  const medium = fam !== "small";
+  w.setPadding(14, medium ? 16 : 14, 12, medium ? 16 : 14);
+  w.url = runUrl("stage");
+  const top = w.addStack(); top.centerAlignContent();
+  const ic = top.addStack(); ic.size = new Size(26, 26); ic.cornerRadius = 8; ic.backgroundColor = soft("stage", 0.18); ic.centerAlignContent();
+  sym(ic, TYPES.stage.symbol, 13, tint("stage"));
+  top.addSpacer(7); txt(top, "Stage", 13, C.text, 7);
+  if (!S) { w.addSpacer(); txt(w, "Geen verbinding", 12, C.muted); w.addSpacer(); return; }
+  const G = S.stage;
+  if (medium) { top.addSpacer(); if (G.place) txt(top, G.place, 10, C.muted, 5); }
+  w.addSpacer();
+  if (!medium) {
+    const v = w.addStack(); v.bottomAlignContent(); txt(v, hm(G.tot), 24, C.text, 7); v.addSpacer(3); txt(v, "/ " + G.goalH + "u", 11, C.muted, 6);
+    w.addSpacer(5); progressBar(w, 128, G.pct); w.addSpacer(4);
+    txt(w, G.tot >= G.goal ? "doel gehaald" : `${G.pct}% · nog ${hm(G.left)}`, 10, C.muted, 5);
+  } else {
+    const body = w.addStack(); body.topAlignContent();
+    const left = body.addStack(); left.layoutVertically(); left.size = new Size(150, 0);
+    const v = left.addStack(); v.bottomAlignContent(); txt(v, hm(G.tot), 26, C.text, 7); v.addSpacer(3); txt(v, "/ " + G.goalH + "u", 12, C.muted, 6);
+    left.addSpacer(6); progressBar(left, 146, G.pct); left.addSpacer(6);
+    const row = left.addStack(); row.spacing = 12;
+    [[G.pct + "%", "klaar"], [hm(G.left), "te doen"], [hm(G.week), "deze week"]].forEach(([a, b]) => { const c = row.addStack(); c.layoutVertically(); txt(c, a, 12, C.text, 7); txt(c, b, 9, C.muted, 4); });
+    body.addSpacer(14);
+    const right = body.addStack(); right.layoutVertically();
+    section(right, G.tasks.length ? "Te doen voor stage" : "Laatste keer", tint("stage"));
+    if (G.tasks.length) G.tasks.slice(0, 2).forEach(t => { const r = right.addStack(); r.centerAlignContent(); sym(r, "circle", 10, C.muted); r.addSpacer(6); txt(r, t.title, 12, C.text); if (t.deadline) { r.addSpacer(4); txt(r, dueLabel(t.deadline), 9, t.deadline <= addDays(today(), 1) ? RED : C.muted, 6); } right.addSpacer(3); });
+    else if (G.last) { txt(right, `${G.last.date.slice(8, 10)}/${G.last.date.slice(5, 7)} · ${hm(G.last.minutes)}`, 12, C.text, 6); const t = right.addText(G.last.what || ""); t.font = Font.systemFont(11); t.textColor = C.muted; t.lineLimit = 2; }
+    else txt(right, "Nog geen uren", 12, C.muted);
+    right.addSpacer();
+  }
+  w.addSpacer(8);
+  const btn = w.addStack(); btn.url = runUrl("stage"); btn.backgroundColor = soft("stage", 0.16); btn.cornerRadius = 10; btn.setPadding(6, 8, 6, 8); btn.centerAlignContent();
+  btn.addSpacer(); sym(btn, "plus", 10, tint("stage")); btn.addSpacer(4); txt(btn, "Uren toevoegen", 11, C.text, 7); btn.addSpacer();
+}
+
+/* stage-widget met stagetaken i.p.v. uren */
+function stageTasksWidget(w, S, fam) {
+  const medium = fam !== "small";
+  w.setPadding(14, medium ? 16 : 14, 12, medium ? 16 : 14);
+  w.url = runUrl("stage");
+  const top = w.addStack(); top.centerAlignContent();
+  const ic = top.addStack(); ic.size = new Size(26, 26); ic.cornerRadius = 8; ic.backgroundColor = soft("stage", 0.18); ic.centerAlignContent();
+  sym(ic, "checklist", 13, tint("stage"));
+  top.addSpacer(7); txt(top, medium ? "Te doen voor stage" : "Stagetaken", 13, C.text, 7);
+  if (!S) { w.addSpacer(); txt(w, "Geen verbinding", 12, C.muted); w.addSpacer(); return; }
+  const G = S.stage, n = medium ? 3 : 3;
+  if (G.tasks.length) { top.addSpacer(); txt(top, String(G.tasks.length), 12, C.muted, 6); }
+  w.addSpacer(medium ? 8 : 9);
+  if (G.tasks.length) {
+    G.tasks.slice(0, n).forEach(t => {
+      const r = w.addStack(); r.centerAlignContent();
+      const soon0 = t.deadline && t.deadline <= addDays(today(), 1);
+      sym(r, soon0 ? "exclamationmark.circle" : "circle", 10, soon0 ? RED : C.muted); r.addSpacer(6);
+      const tt = r.addText(t.title); tt.font = Font.systemFont(medium ? 13 : 12); tt.textColor = C.text; tt.lineLimit = 1; tt.minimumScaleFactor = 0.8;
+      if (t.deadline && medium) { r.addSpacer(4); const soon = t.deadline <= addDays(today(), 1); const pl = r.addStack(); pl.setPadding(1, 4, 1, 4); pl.cornerRadius = 5; pl.backgroundColor = soon ? new Color("#e5484d", 0.16) : SURF; txt(pl, dueLabel(t.deadline), 9, soon ? RED : C.muted, 6); }
+      w.addSpacer(medium ? 4 : 5);
+    });
+    if (G.tasks.length > n) txt(w, `+${G.tasks.length - n} meer`, 10, C.muted, 5);
+  } else { txt(w, "Niets open", 14, C.text, 7); txt(w, "geen stagetaken meer", 10, C.muted, 5); }
+  w.addSpacer();
+  const btn = w.addStack(); btn.url = runUrl("stage"); btn.backgroundColor = soft("stage", 0.16); btn.cornerRadius = 10; btn.setPadding(6, 8, 6, 8); btn.centerAlignContent();
+  btn.addSpacer(); sym(btn, "plus", 10, tint("stage")); btn.addSpacer(4); txt(btn, "Uren toevoegen", 11, C.text, 7); btn.addSpacer();
 }
 
 /* middelgrote en grote widget: overzicht + snelknoppen */
@@ -322,6 +405,12 @@ async function saveMoney(d, settings, kind) {
   await pushItem("tx-" + tx.date.slice(0, 7), tx);
   return `${kind === "in" ? "Inkomst" : "Uitgave"} · ${d.cat} · ${eur(d.amount)}${desc !== d.cat ? " · " + desc : ""}`;
 }
+async function saveStage(d) {
+  const rec = {id: uid(), date: d.date, from: d.from, to: d.to, pause: d.pause || 0, minutes: d.minutes, what: d.what || ""};
+  let tot = 0;
+  await updateDoc("stage", x => { x = x || {goal: 130, student: "Ade Vansteenkiste", opleiding: "Master Sporttraining & Coaching – UGent", place: "Bonami Sportmedisch Centrum", mentor: "", entries: [], tasks: [], history: []}; x.entries = (x.entries || []).concat(rec); tot = x.entries.reduce((a, e) => a + (e.minutes || 0), 0); return x; });
+  return `Stage · ${hm(rec.minutes)} op ${d.date.slice(8, 10)}/${d.date.slice(5, 7)} · totaal ${hm(tot)}`;
+}
 async function saveList(d) {
   const text = ucf(d.text.trim());
   await pushItem("day", {id: uid(), text, date: d.date, done: false, taskId: ""});
@@ -401,6 +490,8 @@ input.t:focus{outline:2px solid var(--accent);border-color:transparent}
 .done .tick{width:64px;height:64px;border-radius:50%;background:var(--okbg);color:var(--ok);display:grid;place-items:center;font-size:34px;margin:0 auto 14px}
 .done p{color:var(--t2);margin:6px 0 22px}
 .hidden{display:none}
+.tri{display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-top:12px}.tri label{display:block}.l2{display:block;font-size:13px;font-weight:600;color:var(--t2);margin-bottom:6px}.tri .t{padding:11px 10px}
+textarea.t{width:100%;border:1px solid var(--border);background:var(--surface);color:var(--text);border-radius:12px;padding:12px 14px;font-size:16px;font-family:inherit;resize:vertical}
 .prow{display:grid;grid-template-columns:1fr 110px 40px;gap:8px;margin-bottom:8px;align-items:center}
 .prow .t{padding:11px 12px}.prow .pa{text-align:right;font-variant-numeric:tabular-nums}
 .prow .x{border:0;background:var(--s2);color:var(--t2);border-radius:10px;height:44px;font-size:20px}
@@ -426,7 +517,7 @@ input.t:focus{outline:2px solid var(--accent);border-color:transparent}
 <div class="bar" style="position:static;background:none;padding:0"><button class="btn" id="again">Nog één toevoegen</button><p style="font-size:13px;color:var(--t3);margin-top:14px">Klaar? Veeg dit venster naar beneden.</p></div></div>
 <script>
 const CTX = ${JSON.stringify(ctx)}, ORIG = ${JSON.stringify(type)}; let TYPE = ORIG;
-const TITLES = {kot:"Kot",uitgave:"Uitgave",inkomst:"Inkomst",lijstje:"Lijstje",taak:"Taak",voorschot:"Voorschot of schuld"};
+const TITLES = {stage:"Stage-uren",kot:"Kot",uitgave:"Uitgave",inkomst:"Inkomst",lijstje:"Lijstje",taak:"Taak",voorschot:"Voorschot of schuld"};
 const $ = s => document.querySelector(s);
 const st = {cat: CTX.defaultCat || "", date: CTX.today, dir: "in", settled: false, urgent: false, split: "gelijk"};
 const parseAmount = s => { s = String(s || "").trim().replace(/[€\\s]/g, ""); if (s.includes(",")) s = s.replace(/\\./g, "").replace(",", "."); const v = parseFloat(s); return isFinite(v) ? Math.round(v * 100) / 100 : NaN; };
@@ -457,7 +548,12 @@ function draw() {
   $("#ttl").textContent = ORIG === "kot" ? (TYPE === "kot" ? "Kot" : st.dir === "out" ? "Schuld bij iemand" : "Voorschot voor iemand") : TITLES[TYPE];
   $("#dot").style.background = TYPE === "kot" ? "" : (CTX.othersColor || "");
   $("#sw").innerHTML = ORIG !== "kot" ? "" : '<div class="seg3">' + [["kot", "Kot · " + CTX.recipient], ["in", "Voorschot"], ["out", "Schuld"]].map(o => '<button type="button" data-sw="' + o[0] + '" class="' + ((TYPE === "kot" ? "kot" : st.dir) === o[0] ? "on" : "") + '">' + esc(o[1]) + '</button>').join("") + '</div>';
-  if (TYPE === "kot") { $("#sub").textContent = "Voorgeschoten voor " + CTX.recipient;
+  if (TYPE === "stage") { $("#sub").textContent = (CTX.place ? CTX.place + " · " : "") + CTX.stageTot + " van " + CTX.goal + "u";
+    h = '<div class="pick on"><span>Datum</span><input type="date" id="sdate" value="' + CTX.today + '" max="' + CTX.today + '"></div>' +
+      '<div class="tri"><label><span class="l2">Van</span><input class="t" type="time" id="from" value="' + CTX.lastFrom + '"></label><label><span class="l2">Tot</span><input class="t" type="time" id="to" value="' + CTX.lastTo + '"></label><label><span class="l2">Pauze (min)</span><input class="t" id="pause" inputmode="numeric" placeholder="0"></label></div>' +
+      '<div class="mine" id="scalc"></div>' +
+      '<label class="l">Wat heb je gedaan?</label><textarea class="t" id="what" rows="4" placeholder="bv. inspanningstest op de fiets meegevolgd"></textarea>';
+  } else if (TYPE === "kot") { $("#sub").textContent = "Voorgeschoten voor " + CTX.recipient;
     h = '<input class="amount" id="amount" inputmode="decimal" placeholder="€ 0,00">' +
       '<label class="l">Categorie</label>' + chips("cat", CTX.cats.map(c => [c, c]), st.cat) +
       '<label class="l">Omschrijving (optioneel)</label><input class="t" id="desc" placeholder="bv. Colruyt">' +
@@ -504,7 +600,9 @@ function draw() {
   $("#fields").innerHTML = h;
   if (keepAmt && $("#amount")) $("#amount").value = keepAmt; if (keepDesc && $("#desc")) $("#desc").value = keepDesc;
   wire(); validate();
-  const first = $("#amount") || $("#text") || $("#title"); if (first) setTimeout(() => first.focus(), 250);
+  if (TYPE === "stage") { const up = () => { const m = smin(); const over = tm($("#to").value) != null && tm($("#from").value) != null && tm($("#to").value) <= tm($("#from").value); $("#scalc").innerHTML = m > 0 ? "Duur <b>" + Math.floor(m / 60) + "u" + String(m % 60).padStart(2, "0") + "</b><span>" + (Math.round(m / 6) / 10).toString().replace(".", ",") + " uur" + (over ? " · tot na middernacht" : "") + "</span>" : "Vul van en tot in"; validate(); };
+    ["from", "to", "pause"].forEach(i => $("#" + i).addEventListener("input", up)); up(); }
+  const first = $("#amount") || $("#text") || $("#title") || $("#what"); if (first) setTimeout(() => first.focus(), 250);
 }
 function wire() {
   document.querySelectorAll("[data-sw]").forEach(b => b.addEventListener("click", () => { const v = b.dataset.sw; if (v === "kot") TYPE = "kot"; else { TYPE = "voorschot"; st.dir = v; } draw(); }));
@@ -521,11 +619,14 @@ function wire() {
   if ($("#desc") && $("#cat") && $("#cat").tagName === "SELECT") { let touched = false; $("#cat").addEventListener("change", () => touched = true); $("#desc").addEventListener("input", () => { if (!touched && /caf|resto|eten|drink|drank|bar|pint|bier|cola|koffie|friet|frit|pizza|lunch|kebab|snack|burger|sushi/i.test($("#desc").value) && CTX.expenseCats.includes("Eten buitenshuis")) $("#cat").value = "Eten buitenshuis"; }); }
   document.querySelectorAll("input").forEach(i => i.addEventListener("input", validate));
 }
+const tm = t => { const m = /^(\\d{1,2}):(\\d{2})/.exec(t || ""); return m ? (+m[1]) * 60 + (+m[2]) : null; };
+function smin() { const a = tm($("#from").value), b = tm($("#to").value); if (a == null || b == null) return 0; let d = b - a; if (d <= 0) d += 1440; return Math.max(0, d - (parseInt($("#pause").value, 10) || 0)); }
 function collect() {
   const d = {date: st.date, kind: TYPE};
   if ($("#amount")) d.amount = parseAmount($("#amount").value);
   if (TYPE === "kot") { d.cat = st.cat; d.desc = $("#desc").value; d.settled = $("#settled").checked; if (!(d.amount > 0)) return "Vul een bedrag in, bv. 5,45"; if (!d.cat) return "Kies een categorie"; }
   if (TYPE === "uitgave" || TYPE === "inkomst") { d.cat = st.cat; d.desc = $("#desc").value; d.hours = $("#hours") ? parseAmount($("#hours").value) || null : null; if (!(d.amount > 0)) return "Vul een bedrag in"; if (!d.cat) return "Kies een categorie"; }
+  if (TYPE === "stage") { d.date = $("#sdate").value; d.from = $("#from").value; d.to = $("#to").value; d.pause = Math.max(0, parseInt($("#pause").value, 10) || 0); d.minutes = smin(); d.what = $("#what").value.trim(); if (!d.date) return "Kies een datum"; if (!(d.minutes > 0)) return "Vul van en tot in"; return d; }
   if (TYPE === "lijstje") { d.text = $("#text").value; if (!d.text.trim()) return "Wat wil je doen?"; }
   if (TYPE === "taak") { d.title = $("#title").value; d.date = $("#deadline").value || ""; d.time = $("#time").value; d.reminder = !!d.time; d.cat = st.cat;
     if (d.cat === "__new") { d.cat = $("#newCat").value.trim().replace(/^./, c => c.toUpperCase()); d.newCat = true; if (!d.cat) return "Geef je nieuwe categorie een naam"; } d.urgent = $("#urgent").checked; if (!d.title.trim()) return "Wat moet er gebeuren?"; if (!d.cat) return "Kies een categorie"; }
@@ -563,6 +664,8 @@ async function runAdd(type) {
   const pc = {}; others.forEach(i => pc[i.person] = (pc[i.person] || 0) + 1);
   const ctx = {today: t, yesterday: addDays(t, -1), dayBefore: addDays(t, -2), tomorrow: addDays(t, 1), dayAfter: addDays(t, 2), nextWeek: addDays(t, 7),
     recipient: (settings.kot && settings.kot.recipient) || "mama", othersColor: (TYPES.voorschot || {}).color || "", persons: Object.keys(pc).sort((a, b) => pc[b] - pc[a]), expenseCats: exp, ownCat: exp.includes("Vrije tijd") ? "Vrije tijd" : exp[0]};
+  if (type === "stage") { let st = {}; try { st = (await getDoc("stage")).data || {}; } catch (e) {} const es = (st.entries || []).slice().sort((a, b) => (a.date + a.from).localeCompare(b.date + b.from)), last = es[es.length - 1];
+    ctx.lastFrom = last ? last.from : "09:00"; ctx.lastTo = last ? last.to : "17:00"; ctx.place = st.place || ""; ctx.goal = +st.goal || 130; ctx.stageTot = hm(es.reduce((a, e) => a + (e.minutes || 0), 0)); }
   if (type === "kot") { ctx.cats = (settings.kot && settings.kot.cats) || ["Eten", "Drank", "Extra"]; ctx.defaultCat = ctx.cats[0]; }
   if (type === "uitgave") { ctx.cats = order(exp, settings.recentOut); ctx.defaultCat = (settings.recentOut || [])[0] || ""; }
   if (type === "inkomst") { ctx.cats = order(inc, settings.recentIn); ctx.defaultCat = (settings.recentIn || [])[0] || ""; }
@@ -588,6 +691,7 @@ async function runAdd(type) {
       else if (k === "lijstje") label = await saveList(d);
       else if (k === "taak") label = await saveTask(d);
       else if (k === "voorschot") label = await saveOthers(d, settings);
+      else if (k === "stage") label = await saveStage(d);
       if (closed) break;
       await wv.evaluateJavaScript(`LO.done(${JSON.stringify(label)})`, false);
     } catch (e) {
@@ -598,7 +702,7 @@ async function runAdd(type) {
 }
 
 async function menu() {
-  const keys = ["kot", "uitgave", "inkomst", "lijstje", "taak", "voorschot"];
+  const keys = ["kot", "uitgave", "inkomst", "lijstje", "taak", "voorschot", "stage"];
   const opts = keys.map(k => "+ " + TYPES[k].label).concat(["Life OS openen", kcGet("refresh") ? "Opnieuw koppelen / ander account" : "Koppelen met Life OS"]);
   const i = await choose("Life OS", opts, kcGet("refresh") ? "Wat wil je toevoegen?" : "Nog niet gekoppeld.");
   if (i === null) return;
@@ -612,7 +716,7 @@ if (config.runsInWidget) {
   const type = (WPARAM.replace(/\b(donker|dark|zwart|licht|light|wit)\b/g, "").trim().split(/\s+/)[0]) || "overzicht";
   Script.setWidget(await buildWidget(TYPES[type] ? type : "overzicht"));
 } else {
-  const q = (args.queryParameters && args.queryParameters.type) || "";
+  let q = (args.queryParameters && args.queryParameters.type) || ""; if (q === "stagetaken") q = "stage";
   if (TYPES[q] && q !== "overzicht") await runAdd(q); else await menu();
 }
 Script.complete();
