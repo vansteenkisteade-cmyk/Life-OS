@@ -1,5 +1,5 @@
 /* Life OS service worker: offline + meldingen */
-const VERSION = "lifeos-v1";
+const VERSION = "lifeos-v3";
 const SHELL = ["./", "./index.html", "./config.js", "./manifest.webmanifest", "./icons/icon-192.png", "./icons/icon-512.png", "./icons/apple-touch-icon.png"];
 const CDN = [
   "https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js",
